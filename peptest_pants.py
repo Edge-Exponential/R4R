@@ -1,44 +1,62 @@
 import RPi.GPIO as GPIO
 import time
 import datetime
-import signal
 import sys
   
 #***********************************VARIABLE DECLARATIONS***********************************
-
 
 #***************************************MOTOR SET UP****************************************
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
 
-GPIO.setup(11 , GPIO.IN, pull_up_down=GPIO.PUD_UP) #limit switch
+#GPIO.setup(11 , GPIO.IN, pull_up_down=GPIO.PUD_UP) #limit switch
 GPIO.setup(12,GPIO.IN,pull_up_down=GPIO.PUD_UP)
-GPIO.setup(8,  GPIO.OUT) #tableturn clk
-GPIO.setup(13, GPIO.OUT) #tabletran dir
-GPIO.setup(15, GPIO.OUT) #tabletran clk
-GPIO.setup(16, GPIO.OUT) #Relay 
-# GPIO.setup(23, GPIO.OUT) #TB6560
-GPIO.setup(35, GPIO.OUT) #DM860T dir
-GPIO.setup(37, GPIO.OUT) #DM860T clk
+GPIO.setup(11,  GPIO.OUT) #tableturn clk+
+GPIO.setup(15, GPIO.OUT) #tableturn dir
+GPIO.setup(13, GPIO.OUT) #tableturn clk-
 
-#make the cheese shaker chill out
-GPIO.setup(7,GPIO.OUT)
-GPIO.output(7,GPIO.LOW)
-GPIO.setup(3,GPIO.OUT)
-GPIO.output(3,GPIO.LOW)
+GPIO.setup(33, GPIO.OUT) #tabletran clk+
+GPIO.setup(29, GPIO.OUT) #tabletran dir
+GPIO.setup(31, GPIO.OUT) #tabletran clk-
 
+#make the blade chill out
+GPIO.setup(35,GPIO.OUT)
+GPIO.output(35,GPIO.LOW)
+GPIO.setup(36,GPIO.OUT)
+GPIO.output(36,GPIO.LOW)
+GPIO.setup(37, GPIO.OUT)
+GPIO.setup(38,GPIO.OUT)
+GPIO.output(38, GPIO.HIGH)
+GPIO.output(37, GPIO.HIGH)
+#*******************************Arrays************#
+Large=[19,16,13,8,4]
+Medium=[16,11,6,1]
+Small=[15,10,5]
+Indiv=[8,4,1]
 
+n_pep=0
+Tstart=0
+Tstop=0
+#########################################Rotary Interrupt########################################
+global counter
+global revolutions
 
-
+def rotations(self):
+    global n_pep
+    global blade_speed
+    n_pep=n_pep+1
+    Time=time.time()
+            
+#Interrupt that triggers on the falling edge of when a magnet is sensed and calls the prog rotations
+GPIO.add_event_detect(12,GPIO.FALLING,callback=rotations,bouncetime=1)
 
 #******************************************FUNCTIONS******************************************
         
-
 class blade:
     def init():
         global bladeclk
-        bladeclk=GPIO.PWM(7,500) #Define Pin 7, 500Hz
+        bladeclk=GPIO.PWM(36,500) #Define Pin 7, 500Hz
         bladeclk.start(0) #Stop the blade
     
     def turn(speed=0):
@@ -49,30 +67,10 @@ class blade:
         blade.turn(0) #Stop the blade from spinning
         
     def end():
-        bladeclk.stop()
-        
-class hopper:
-    def init(pin35=35,pin37=37):
-        global hopperclk
-        hopperclk=GPIO.PWM(pin37,500) #Define the hopper pin and frequency
-        hopperclk.start(0)
-        GPIO.output(pin35,1)
-                
-    def rot(duty=50,freq=1000):
-        global hopperclk
-        if freq==0:
-            hopperclk.ChangeDutyCycle(0)
-        else:
-            hopperclk.ChangeDutyCycle(duty)
-            hopperclk.ChangeFrequency(freq)
-            
-    def stop():
-        global hopperclk
-        hopperclk.ChangeDutyCycle(0)
-        
+        bladeclk.stop()   
 
 class table:
-    def init(pin1=8,pin2=15):
+    def init(pin1=11,pin2=33):
         global turnclk
         turnclk=GPIO.PWM(pin1,500)
         turnclk.start(0)
@@ -81,14 +79,14 @@ class table:
         tranclk=GPIO.PWM(pin2,1000)
         tranclk.start(0)
         
-    def move(dist,freq=2000,pin3=15): #Distance in inches that the table should move
+    def move(dist,freq=50000,pin3=33): #Distance in inches that the table should move
         if dist>0:
-            GPIO.output(13,0)
+            GPIO.output(29,0)
         else:
-            GPIO.output(13,1)
+            GPIO.output(29,1)
             
         global REV
-        REV=abs(dist)*200*16/(3.1415926536*.411) #Convert distance to steps on motor
+        REV=abs(dist)*200*16/(3.1415926536*.40098425196) #(.411in) Convert distance to steps on motor
         REV=round(REV)
         print(REV)
         for i in range(0,REV):
@@ -107,6 +105,7 @@ class table:
             
     def turn(freq):
         global turnclk
+        GPIO.output(15,0)
         if freq==0:
             turnclk.ChangeDutyCycle(0)
         else:
@@ -120,73 +119,184 @@ class table:
     
 def stop():
     table.stop()
-    hopper.stop()
     blade.stop()
-
+    
+def calc(num_pep):
+    steps=200
+    micro=16
+    total_steps=steps*micro
+    step_angle=360/total_steps
+    pps=blade_speed/60 #Pep per sec
+    
+    T_rpm=60/(num_pep/pps)
+    T_freq=T_rpm/((step_angle/360)*60) #Frequency to run table
+        
+def advance(pep_need):
+    while n_pep<pep_need:
+        calc(pep_need)
+        table.turn(T_freq)
 #########################################INITIALIZE################################
 blade.init()
 table.init()
-hopper.init()
  #########################################Home Interrupt########################################
 
 #switch sensor callback
-def detect(channel):
-    if GPIO.input(11)==1: #Table home
-        stop() #Stop the rotation and translation of the table
-
-GPIO.add_event_detect(11,GPIO.RISING, callback=detect,bouncetime=100)
-#########################################Rotary Interrupt########################################
-global counter
-global revolutions
-
-def rotations():
-    while counter<6:
-        if GPIO.input(rotary)==LOW: #Magnet sensed
-            counter=counter+1 #Add one to the magnet counter
-    if counter==6:
-        revolutions=revolutions+1 #If six magnets were counted, 1 revolution has been completed
-        counter=0 #Set the magnet count back to 0
-        
-#Interrupt that triggers on the falling edge of when a magnet is sensed and calls the prog rotations
-GPIO.add_event_detect(12,GPIO.FALLING,callback=rotations,bouncetime=1)
+# def detect(channel):
+#     if GPIO.input(11)==1: #Table home
+#         stop() #Stop the rotation and translation of the table
+# 
+# GPIO.add_event_detect(11,GPIO.RISING, callback=detect,bouncetime=100)
 ########################################DEMO########################################
-def demo(speedmod=1):#speedmod coefficient to change speed of the whole script?
-    blade.turn(100)#Turn blade at 2500rpm
-    time.sleep(.06)#Wait for blade to reach full speed
+def demo(size=14,speed=50):#speedmod coefficient to change speed of the whole script?
     
-    table.move(.65)
-    hopper.rot(50,648) #Turn hopper at 60rpm
-    table.turn(1620) #Turn pizza at 60rpm
-    time.sleep(1) #Wait for full rotation 4[pep]/4[pep/s]
-    table.stop()
-    hopper.stop()
+    if size==14:
+        table.move(4.7)
+        time.sleep(1)
+        blade.turn(speed)
+        table.turn(2026.133) #Turn pizza at 37.99rpm
+        time.sleep(1.6) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
+        blade.stop()
+        table.stop()
+        
+        table.move(-1.3)
+        blade.turn(speed)
+        table.turn(1013.333) #Turn the table at 19 rpm (1rpm=27Hz)
+        time.sleep(3.1578) #Wait 3.1578s for full rotation 8[pep]/4[pep/s]
+        blade.stop()
+        table.stop()
     
-    table.move(.65)
-    hopper.rot(50,648)
-    table.turn(810) #Turn the table at 30 rpm (1rpm=27Hz)
-    time.sleep(2) #Wait for full rotation 8[pep]/4[pep/s]
-    table.stop()
-    hopper.stop()
+        table.move(-1.3)
+        blade.turn(speed)
+        table.turn(623.573) #Turn table at 11.692rpm
+        time.sleep(5.132)#Wait 5.132s for full rotation 13[pep]/4[pep/s]
+        blade.stop()
+        table.stop()
+        
+        table.move(-1.3)
+        blade.turn(speed)
+        table.turn(506.61) #Turn table at 9.499rpm
+        time.sleep(6.316)#Wait 6.316s for full rotation 16[pep]/4[pep/s]
+        blade.stop()
+        table.stop()
+        
+        blade.turn(speed)#Turn blade at 2500rpm
+        table.turn(426.667) #Turn table at 8rpm
+        time.sleep(7.5)#Wait 7.5s for full rotation 19[pep]/4[pep/s]
+        blade.stop()
+        table.stop()
     
-    table.move(.65)
-    hopper.rot(50,648)
-    table.turn(498) #Turn table at 18.462rpm
-    time.sleep(3.25)#Wait for full rotation 13[pep]/4[pep/s]
-    table.stop()
-    hopper.stop()
+        table.move(-.3)
+        
+    elif size==12:
+        blade.turn(speed)#Turn blade at 2500rpm
+        table.turn(500) #Turn table at 9.375rpm
+        time.sleep(6.4)#Wait 6.4s for full rotation 16pep]/4[pep/s]
+        blade.stop()
+        table.stop()
     
-    table.move(.65)
-    hopper.rot(50,648)
-    table.turn(405) #Turn table at 15rpm
-    time.sleep(4)#Wait for full rotation 16[pep]/4[pep/s]
-    table.stop()
-    hopper.stop()
+        table.move(1.6)
+        blade.turn(speed)
+        table.turn(727.2727) #Turn table at 13.636rpm
+        time.sleep(4.4)#Wait 4.4s for full rotation 16[pep]/4[pep/s]
+        blade.stop()
+        table.stop()
     
-    table.move(.65)
-    hopper.rot(50,648)
-    table.turn(341) #Turn table at 12.632rpm
-    time.sleep(4.75)#Wait for full rotation 19[pep]/4[pep/s]
-    table.stop()
-    hopper.stop()
+        table.move(1.75)
+        blade.turn(speed)
+        table.turn(1333.333) #Turn table at 25rpm
+        time.sleep(2.4) #Wait 2.4s for full rotation 13[pep]/4[pep/s]
+        blade.stop()
+        table.stop()
     
-    table.move(-.65*4)
+        table.move(2)
+        blade.turn(speed)
+        table.turn(0) #Turn the table at 0 rpm (1rpm=27Hz)
+        time.sleep(.4) #Wait 0.4s for full rotation 8[pep]/4[pep/s]
+        blade.stop()
+        table.stop()
+    
+        table.move(-5.35)
+        
+    elif size==10:
+        
+        table.move(4.25)     
+        blade.turn(speed)
+        table.turn(1600) #Turn table at 30 rpm for 5 pep
+        time.sleep(2) #Wait for 2s to get 5 pep
+        blade.stop()
+        table.stop()
+        
+        table.move(-1.5)
+        blade.turn(speed)
+        table.turn(800)#Turn table at 800Hz for 15 RPM
+        time.sleep(4) #Wait 4s for 10 pep
+        blade.stop()
+        table.stop()
+        
+        table.move(-1.6)
+        blade.turn(speed)
+        table.turn(533.3333) #Turn table at 533.33Hz for 10 rpm
+        time.sleep(6) #Wait 6s for 15 pep
+        blade.stop()
+        table.stop()
+        
+    elif sie==7:
+        
+        table.move(5.5)
+        
+        blade.turn(speed)
+        time.sleep(.4) #Wait 0.4s for 1pep
+        blade.stop()
+        
+        table.move(-1.5)
+        blade.turn(speed)
+        table.turn(2000) #Turn table at 2000Hz for 37.5 rpm
+        time.sleep(1.6) #Wait 1.6s for 4 pep
+        blade.stop()
+        table.stop()
+        
+        table.move(-1.35)
+        blade.turn(speed)
+        table.turn(1000) #Turn table at 1000Hz for 18.75rpm
+        time.sleep(3.2) #Wait 3.2s for 8 pep
+        blade.stop()
+        table.stop()
+        
+        table.move(-2.65) #Move table to home
+        
+    
+def demo2(size=14,speed=50):#speedmod coefficient to change speed of the whole script?
+    
+    if size==14:
+        table.move(4.7)
+        time.sleep(1)
+        blade.turn(speed)
+        #table.turn(T_freq) #Turn pizza at 37.99rpm, 2026.133Hz
+        advance(Large[1]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
+        
+        table.move(-1.3)
+        #table.turn(1013.333) #Turn the table at 19 rpm (1rpm=27Hz)
+        #time.sleep(3.1578) #Wait 3.1578s for full rotation 8[pep]/4[pep/s]
+        advance(Large[2])    
+    
+        table.move(-1.3)
+        blade.turn(speed)
+        #table.turn(623.573) #Turn table at 11.692rpm
+        #time.sleep(5.132)#Wait 5.132s for full rotation 13[pep]/4[pep/s]
+        advance(Large[3])
+        
+        table.move(-1.3)
+        #table.turn(506.61) #Turn table at 9.499rpm
+        #time.sleep(6.316)#Wait 6.316s for full rotation 16[pep]/4[pep/s]
+        advance(Large[4])
+
+        table.move(-1.3)
+        blade.turn(speed)#Turn blade at 2500rpm
+        #table.turn(426.667) #Turn table at 8rpm
+        #time.sleep(7.5)#Wait 7.5s for full rotation 19[pep]/4[pep/s]
+        advance(Large[5])
+        blade.stop()
+        table.stop()
+    
+        table.move(-.3)
+        
