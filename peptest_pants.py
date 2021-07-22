@@ -40,8 +40,8 @@ global Tstop
 global n_pep
 global blade_speed
 n_pep=0
-Tstart=0
-Tstop=0
+Tstart=time.time()
+Tstop=time.time()
 blade_speed=150
 #########################################Rotary Interrupt########################################
 global counter
@@ -62,14 +62,14 @@ def rotations(self):
     
             
 #Interrupt that triggers on the falling edge of when a magnet is sensed and calls the prog rotations
-GPIO.add_event_detect(12,GPIO.FALLING,callback=rotations,bouncetime=300)
+GPIO.add_event_detect(12,GPIO.FALLING,callback=rotations,bouncetime=100)
 
 #******************************************FUNCTIONS******************************************
         
 class blade:
     def init():
         global bladeclk
-        bladeclk=GPIO.PWM(35,500) #Define Pin 7, 500Hz
+        bladeclk=GPIO.PWM(36,500) #Define Pin 7, 500Hz
         bladeclk.start(0) #Stop the blade
     
     def turn(speed=0):
@@ -144,14 +144,14 @@ def calc(num_pep):
     
     T_rpm=60/(num_pep/pps)
     T_freq=T_rpm/((step_angle/360)*60) #Frequency to run table
-    print(T_freq)
+    table.turn(T_freq)
     
 def advance(pep_need):
     global T_freq
     global n_pep
     while n_pep<pep_need:
         calc(pep_need)
-        table.turn(T_freq)
+    n_pep=0
 #########################################INITIALIZE################################
 blade.init()
 table.init()
@@ -281,44 +281,108 @@ def demo(size=14,speed=50):#speedmod coefficient to change speed of the whole sc
         
         table.move(-2.65) #Move table to home
         
-    
-def demo2(size=14,speed=50):#speedmod coefficient to change speed of the whole script?
-    
-    if size==14:
+global speed   
+speed=45
+
+def R_Large():
         table.move(4.7)
-        time.sleep(1)
+        time.sleep(.2)
         blade.turn(speed)
-        table.turn(2026.133)
-        #table.turn(T_freq) #Turn pizza at 37.99rpm, 2026.133Hz
-        advance(Large[0]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
+        advance(Large[4]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
         
         table.move(-1.3)
-        n_pep=0
-        #table.turn(1013.333) #Turn the table at 19 rpm (1rpm=27Hz)
-        #time.sleep(3.1578) #Wait 3.1578s for full rotation 8[pep]/4[pep/s]
-        advance(Large[1])    
+        advance(Large[3])    
     
         table.move(-1.3)
         blade.turn(speed)
-        n_pep=0
-        #table.turn(623.573) #Turn table at 11.692rpm
-        #time.sleep(5.132)#Wait 5.132s for full rotation 13[pep]/4[pep/s]
         advance(Large[2])
         
         table.move(-1.3)
-        n_pep=0
-        #table.turn(506.61) #Turn table at 9.499rpm
-        #time.sleep(6.316)#Wait 6.316s for full rotation 16[pep]/4[pep/s]
-        advance(Large[3])
+        advance(Large[1])
 
         table.move(-1.3)
-        n_pep=0
-        #blade.turn(speed)#Turn blade at 2500rpm
-        #table.turn(426.667) #Turn table at 8rpm
-        #time.sleep(7.5)#Wait 7.5s for full rotation 19[pep]/4[pep/s]
-        advance(Large[4])
+        advance(Large[0])
         blade.stop()
         table.stop()
     
         table.move(-.3)
         
+def R_Medium():
+        table.move(3.7)
+        time.sleep(.2)
+        blade.turn(speed)
+        advance(Medium[3])
+        
+        table.move(-1.3)
+        advance(Medium[2])
+        
+        table.move(-1.3)
+        advance(Medium[1])
+        
+        table.move(-1.3)
+        advance(Medium[0])
+        
+def R_Small():
+        table.move(2.7)
+        time.sleep(.2)
+        blade.turn(speed)
+        advance(Small[2])
+        
+        table.move(-1.3)
+        advance(Small[1])
+        
+        table.move(-1.3)
+        advance(Small[0])
+        
+def R_indiv():
+    table.move(1.2)
+    time.sleep(.2)
+    blade.turn(speed)
+    advance(Indiv[2])
+       
+    table.move(-.75)
+    advance(Indiv[1])
+        
+    table.move(-.25)
+    advance(Indiv[0])
+
+#******Screen Code*******
+from tkinter import *
+window=Tk()
+def killscreen():
+    window.destroy()
+
+stopFont=font.Font(family='Helvetica', size=50, weight='bold')
+font=font.Font(family='Helvetica', size=24, weight='normal')
+
+#window.overrideredirect(1)
+window.geometry('800x480')
+window.title("Sm^rt Pep")
+namelabel=Label(window, text="EDGE EXPONENTIAL SM^RT Pep", font=font)
+namelabel.place(x=100,y=0)
+RR=Label(window, text="R4R:", font=font)
+RR.place(x=0,y=35)
+
+text14=Button(window, text="14\"", font=font, bg="black", fg="white", command=R_Large,height=4, width=7)
+text14.place(x=467, y=70)
+text12=Button(window, text="12\"", font=font, bg="black", fg="white", command=R_Medium,height=4,width=7)
+text12.place(x=313, y=70)
+text10=Button(window, text="10\"", font=font, bg="black", fg="white", command=R_Small,height=4, width=7)
+text10.place(x=159, y=70)
+text07=Button(window, text="7\"", font=font, bg="black", fg="white", command=R_indiv,height=4,width=7)
+text07.place(x=5, y=70)
+
+FullPep=Label(window, text="Full Pep:", font=font)
+FullPep.place(x=0,y=227)
+
+homebutton= Button(window, text="Home", font=font, bg="yellow", fg="black", command=killscreen,height=1, width=7)
+homebutton.place(x=5, y=430)
+cleanbutton= Button(window, text="Clean Blade", font=font, bg="yellow", fg="black", command=killscreen,height=1, width=9)
+cleanbutton.place(x=159, y=430)
+changebladebutton= Button(window, text="Change Blade", font=font, bg="yellow", fg="black", command=killscreen,height=1, width=10)
+changebladebutton.place(x=350, y=430)
+exitbutton= Button(window, text="EXIT", font=font, bg="red2", fg="white", command=killscreen,height=1, width=7)
+exitbutton.place(x=467, y=300)
+
+window.mainloop()
+
