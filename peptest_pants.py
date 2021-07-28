@@ -2,7 +2,8 @@ import RPi.GPIO as GPIO
 import time
 import datetime
 import sys
-  
+import signal
+from tkinter import ttk
 #***********************************VARIABLE DECLARATIONS***********************************
 
 #***************************************MOTOR SET UP****************************************
@@ -10,7 +11,7 @@ import sys
 GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
 
-#GPIO.setup(11 , GPIO.IN, pull_up_down=GPIO.PUD_UP) #limit switch
+GPIO.setup(18 , GPIO.IN, pull_up_down=GPIO.PUD_UP) #limit switch
 GPIO.setup(12,GPIO.IN,pull_up_down=GPIO.PUD_UP)
 GPIO.setup(11,  GPIO.OUT) #tableturn clk+
 GPIO.setup(15, GPIO.OUT) #tableturn dir
@@ -29,6 +30,39 @@ GPIO.setup(37, GPIO.OUT)
 GPIO.setup(38,GPIO.OUT)
 GPIO.output(38, GPIO.HIGH)
 GPIO.output(37, GPIO.HIGH)
+
+#***********Initialize Screen***********#
+from tkinter import *
+window=Tk()
+def killscreen():
+    window.destroy()
+
+def cancel():
+    global state
+    global top
+    state=1
+    top.destroy()
+    
+stopFont=font.Font(family='Helvetica', size=50, weight='bold')
+font=font.Font(family='Helvetica', size=20, weight='normal')
+
+window.overrideredirect(1)
+window.geometry('800x480')
+window.title("Sm^rt Pep")
+namelabel=Label(window, text="Sm^rt Pep", font=font)
+namelabel.place(x=250,y=0)
+RR=Label(window, text="R4R:", font=font)
+RR.place(x=0,y=35)
+
+def open_popup():
+    global top
+    top=Toplevel(window)
+    top.overrideredirect(1)
+    top.geometry("800x480")
+    top.title("Stop Window")
+    Label(top, text="Press Button to Cancel",font=font).place(x=155,y=0)
+    Button(top,text="CANCEL",bg="red",fg="white",command=cancel,height=15,width=25).place(x=180,y=100)
+    Button(top,text="EXIT",command=top.destroy).place(x=267,y=375)
 #*******************************Arrays************#
 Large=[19,16,13,8,4]
 Medium=[16,11,6,1]
@@ -43,6 +77,8 @@ n_pep=0
 Tstart=time.time()
 Tstop=time.time()
 blade_speed=150
+global state
+state=0
 #########################################Rotary Interrupt########################################
 global counter
 global revolutions
@@ -57,7 +93,7 @@ def rotations(self):
     Tstart=Tstop
     Tstop=time.time()
     deltaT=Tstop-Tstart
-    print(deltaT)
+    #print(deltaT)
     blade_speed=60/deltaT
     
             
@@ -93,6 +129,7 @@ class table:
         tranclk.start(0)
         
     def move(dist,freq=50000,pin3=33): #Distance in inches that the table should move
+        global state
         if dist>0:
             GPIO.output(29,0)
         else:
@@ -117,7 +154,7 @@ class table:
             
     def turn(freq):
         global turnclk
-        GPIO.output(15,0)
+        GPIO.output(15,1)
         if freq==0:
             turnclk.ChangeDutyCycle(0)
         else:
@@ -132,7 +169,8 @@ class table:
 def stop():
     table.stop()
     blade.stop()
-    
+
+  
 def calc(num_pep):
     global T_freq
     global blade_speed
@@ -148,26 +186,35 @@ def calc(num_pep):
     
 def advance(pep_need):
     global T_freq
+    global state
     global n_pep
-    while n_pep<pep_need:
+    while n_pep<pep_need and state==0:
+        window.update()
         calc(pep_need)
     n_pep=0
+    
+def home():
+    while GPIO.input(18)==1:
+        GPIO.output(29,1)
+        table.trans(50000)
+    table.stop()
+    
 #########################################INITIALIZE################################
 blade.init()
 table.init()
  #########################################Home Interrupt########################################
 
 #switch sensor callback
-# def detect(channel):
-#     if GPIO.input(11)==1: #Table home
-#         stop() #Stop the rotation and translation of the table
-# 
-# GPIO.add_event_detect(11,GPIO.RISING, callback=detect,bouncetime=100)
+def detect(channel):
+    if GPIO.input(18)==0: #Table home
+        table.stop() #Stop the rotation and translation of the table
+
+GPIO.add_event_detect(18,GPIO.FALLING, callback=detect,bouncetime=100)
 ########################################DEMO########################################
 def demo(size=14,speed=50):#speedmod coefficient to change speed of the whole script?
     
     if size==14:
-        table.move(4.7)
+        table.move(5.25)
         time.sleep(1)
         blade.turn(speed)
         table.turn(2026.133) #Turn pizza at 37.99rpm
@@ -282,11 +329,13 @@ def demo(size=14,speed=50):#speedmod coefficient to change speed of the whole sc
         table.move(-2.65) #Move table to home
         
 global speed   
-speed=45
+speed=37  
 
 def R_Large():
-        table.move(4.7)
-        time.sleep(.2)
+        global state
+        open_popup()
+        state==0
+        table.move(5.5)
         blade.turn(speed)
         advance(Large[4]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
         
@@ -306,8 +355,12 @@ def R_Large():
         table.stop()
     
         table.move(-.3)
+        top.destroy()
         
 def R_Medium():
+        global state
+        state=0
+        open_popup()
         table.move(3.7)
         time.sleep(.2)
         blade.turn(speed)
@@ -323,6 +376,9 @@ def R_Medium():
         advance(Medium[0])
         
 def R_Small():
+        global state
+        state=0
+        open_popup()
         table.move(2.7)
         time.sleep(.2)
         blade.turn(speed)
@@ -335,6 +391,9 @@ def R_Small():
         advance(Small[0])
         
 def R_indiv():
+    global state
+    state=0
+    open_popup()
     table.move(1.2)
     time.sleep(.2)
     blade.turn(speed)
@@ -347,42 +406,37 @@ def R_indiv():
     advance(Indiv[0])
 
 #******Screen Code*******
-from tkinter import *
-window=Tk()
-def killscreen():
-    window.destroy()
-
-stopFont=font.Font(family='Helvetica', size=50, weight='bold')
-font=font.Font(family='Helvetica', size=24, weight='normal')
-
-#window.overrideredirect(1)
-window.geometry('800x480')
-window.title("Sm^rt Pep")
-namelabel=Label(window, text="EDGE EXPONENTIAL SM^RT Pep", font=font)
-namelabel.place(x=100,y=0)
-RR=Label(window, text="R4R:", font=font)
-RR.place(x=0,y=35)
-
-text14=Button(window, text="14\"", font=font, bg="black", fg="white", command=R_Large,height=4, width=7)
-text14.place(x=467, y=70)
-text12=Button(window, text="12\"", font=font, bg="black", fg="white", command=R_Medium,height=4,width=7)
-text12.place(x=313, y=70)
-text10=Button(window, text="10\"", font=font, bg="black", fg="white", command=R_Small,height=4, width=7)
-text10.place(x=159, y=70)
-text07=Button(window, text="7\"", font=font, bg="black", fg="white", command=R_indiv,height=4,width=7)
-text07.place(x=5, y=70)
+text14=Button(window, text="14\"", font=font, bg="black", fg="white", command=R_Large,height=3, width=8)
+text14.place(x=470, y=70)
+text12=Button(window, text="12\"", font=font, bg="black", fg="white", command=R_Medium,height=3,width=8)
+text12.place(x=320, y=70)
+text10=Button(window, text="10\"", font=font, bg="black", fg="white", command=R_Small,height=3, width=8)
+text10.place(x=170, y=70)
+text07=Button(window, text="7\"", font=font, bg="black", fg="white", command=R_indiv,height=3,width=8)
+text07.place(x=20, y=70)
 
 FullPep=Label(window, text="Full Pep:", font=font)
-FullPep.place(x=0,y=227)
+FullPep.place(x=0,y=180)
 
-homebutton= Button(window, text="Home", font=font, bg="yellow", fg="black", command=killscreen,height=1, width=7)
-homebutton.place(x=5, y=430)
-cleanbutton= Button(window, text="Clean Blade", font=font, bg="yellow", fg="black", command=killscreen,height=1, width=9)
-cleanbutton.place(x=159, y=430)
-changebladebutton= Button(window, text="Change Blade", font=font, bg="yellow", fg="black", command=killscreen,height=1, width=10)
-changebladebutton.place(x=350, y=430)
-exitbutton= Button(window, text="EXIT", font=font, bg="red2", fg="white", command=killscreen,height=1, width=7)
-exitbutton.place(x=467, y=300)
+
+F_Large=Button(window, text="14\"", font=font, bg="black", fg="white", command=killscreen,  height=3, width=8)
+F_Large.place(x=470,y=215)
+F_Medium=Button(window,text="12\"",font=font,bg="black",fg="white",command=killscreen,height=3,width=8)
+F_Medium.place(x=320,y=215)
+F_Small=Button(window,text="10\"",font=font,bg="black",fg="white",command=killscreen,height=3,width=8)
+F_Small.place(x=170,y=215)
+F_indiv=Button(window,text="7\"",font=font,bg="black",fg="white",command=killscreen,height=3,width=8)
+F_indiv.place(x=20,y=215)
+
+
+exitbutton= Button(window, text="EXIT", font=font,bg="green", fg="white", command=killscreen,height=2, width=9)
+exitbutton.place(x=475, y=400)
+homeButton=Button(window,text="Table Home",font=font,bg="green",fg="white",command=home,height=2,width=9)
+homeButton.place(x=5,y=400)
+
+StopButton=Button(window,text="STOP", font=font,bg="red",fg="white",command=stop(),height=3,width=11)
+StopButton.place(x=220,y=367)
+Button(window,text="Cancel Popup",command=open_popup).place(x=5,y=350)
 
 window.mainloop()
 
