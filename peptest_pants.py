@@ -69,6 +69,7 @@ def open_popup():
 #*******************************Arrays************#
 Large=2*np.array([20,17,13,6,4])
 FLarge=2*np.array([33,27,20,18,6,1])
+Finish_Large=2*np.array([13,10,7,12,2])
 Medium=[16,11,6,1]
 Small=[15,10,5]
 Indiv=[8,4,1]
@@ -345,6 +346,38 @@ def F_Large():
         top.destroy()
         stop()
         
+def Finish_Large():
+        global state
+        open_popup()
+        state=0
+        table.move(5.25)
+        time.sleep(.2)
+        global Tstart
+        global Tstop
+        Tstart=time.time()
+        Tstop=time.time()
+        blade.turn(speed)
+        advance(Finish_Large[4]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
+        
+        table.Move(-1.5)
+        advance(Finish_Large[3])    
+    
+        table.Move(-1.3)
+        advance(Finish_Large[2])
+        
+        table.Move(-1.3)
+        advance(Finish_Large[1])
+
+        table.Move(-1.3)
+        advance(Finish_Large[0])
+        blade.stop()
+        table.stop()
+    
+        table.Move(-.3)
+        top.destroy()
+        stop()
+    
+
 def Spiral():
     global state
     state=0
