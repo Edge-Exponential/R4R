@@ -157,7 +157,7 @@ class table:
             GPIO.output(29,0)
         else:
             GPIO.output(29,1)
-        global transclk
+        global tranclk
         if freq==0:
             tranclk.ChangeDutyCycle(0)
         else:
@@ -175,6 +175,7 @@ class table:
         
     def stop():
         global turnclk
+        global tranclk
         turnclk.ChangeDutyCycle(0)
         tranclk.ChangeDutyCycle(0)
     
@@ -344,40 +345,36 @@ def F_Large():
         top.destroy()
         stop()
         
-def Spiral_f():
-#     global speed
-#     global state
-#     global n_pep
-#     state=0
-#     #open_popup()
-#     table.move(5.5)
-#     blade.turn(speed)
-#     table.turn(5000)
-#     table.trans(-1,2500)
-#     while n_pep<60:
-#         print(n_pep)
-#     stop()
+def Spiral():
     global state
     state=0
-    table.move(5.25)
+    table.move(5.5)
     time.sleep(.2)
     global Tstart
     global Tstop
     Tstart=time.time()
     Tstop=time.time()
     blade.turn(speed)
-    table.trans(-1,1500)
+    table.trans(-1,1000)
+    table.turn(1250)
+    time.sleep(.2)
     advance(Large[4]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
-    time.sleep(1.2)
+    table.trans(-1,1000)
+    table.turn(1100)
     advance(Large[3])
-    time.sleep(1.2)
+    table.turn(750)
+    table.trans(-1,800)
     advance(Large[2])
-    time.sleep(1.2)
+    table.turn(625)
+    table.trans(-1,650)
     advance(Large[1])
-    time.sleep(1.2)
+    table.turn(500)
+    table.trans(500 )
     advance(Large[0])
+    state=1
     blade.stop()
     table.stop()
+    stop()
 
 #******Screen Code*******
 text14=Button(window, text="14\"", font=font, bg="black", fg="white", command=R_Large,height=3, width=8)
@@ -413,4 +410,3 @@ StopButton.place(x=220,y=367)
 Button(window,text="Cancel Popup",command=open_popup).place(x=5,y=350)
 
 window.mainloop()
-
