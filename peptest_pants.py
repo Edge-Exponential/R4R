@@ -152,7 +152,11 @@ class table:
     def Move(dist):
         _thread.start_new_thread(table.move,(dist,))
             
-    def trans(freq):
+    def trans(dist,freq):
+        if dist>0:
+            GPIO.output(29,0)
+        else:
+            GPIO.output(29,1)
         global transclk
         if freq==0:
             tranclk.ChangeDutyCycle(0)
@@ -206,7 +210,7 @@ def advance(pep_need):
 def home():
     while GPIO.input(18)==1:
         GPIO.output(29,1)
-        table.trans(50000)
+        table.trans(-1,50000)
     table.stop()
     
 #########################################INITIALIZE################################
@@ -340,6 +344,40 @@ def F_Large():
         top.destroy()
         stop()
         
+def Spiral_f():
+#     global speed
+#     global state
+#     global n_pep
+#     state=0
+#     #open_popup()
+#     table.move(5.5)
+#     blade.turn(speed)
+#     table.turn(5000)
+#     table.trans(-1,2500)
+#     while n_pep<60:
+#         print(n_pep)
+#     stop()
+    global state
+    state=0
+    table.move(5.25)
+    time.sleep(.2)
+    global Tstart
+    global Tstop
+    Tstart=time.time()
+    Tstop=time.time()
+    blade.turn(speed)
+    table.trans(-1,1500)
+    advance(Large[4]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
+    time.sleep(1.2)
+    advance(Large[3])
+    time.sleep(1.2)
+    advance(Large[2])
+    time.sleep(1.2)
+    advance(Large[1])
+    time.sleep(1.2)
+    advance(Large[0])
+    blade.stop()
+    table.stop()
 
 #******Screen Code*******
 text14=Button(window, text="14\"", font=font, bg="black", fg="white", command=R_Large,height=3, width=8)
