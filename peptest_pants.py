@@ -4,6 +4,8 @@ import datetime
 import sys
 import signal
 from tkinter import ttk
+import numpy as np
+import _thread
 #***********************************VARIABLE DECLARATIONS***********************************
 
 #***************************************MOTOR SET UP****************************************
@@ -41,6 +43,7 @@ def cancel():
     global state
     global top
     state=1
+    stop()
     top.destroy()
     
 stopFont=font.Font(family='Helvetica', size=50, weight='bold')
@@ -60,20 +63,23 @@ def open_popup():
     top.overrideredirect(1)
     top.geometry("800x480")
     top.title("Stop Window")
-    Label(top, text="Press Button to Cancel",font=font).place(x=155,y=0)
-    Button(top,text="CANCEL",bg="red",fg="white",command=cancel,height=15,width=25).place(x=180,y=100)
-    Button(top,text="EXIT",command=top.destroy).place(x=267,y=375)
+    Label(top, text="Press Button to Cancel",font=font).place(x=185,y=0)
+    Button(top,text="CANCEL",bg="red",fg="white",command=cancel,height=15,width=25).place(x=205,y=100)
+    Button(top,text="EXIT",command=top.destroy).place(x=290,y=375)
 #*******************************Arrays************#
-Large=[19,16,13,8,4]
+Large=2*np.array([20,17,13,6,4])
+FLarge=2*np.array([33,27,20,18,6,1])
 Medium=[16,11,6,1]
 Small=[15,10,5]
 Indiv=[8,4,1]
 
-global Tstart
-global Tstop
+
 global n_pep
 global blade_speed
 n_pep=0
+
+global Tstart
+global Tstop
 Tstart=time.time()
 Tstop=time.time()
 blade_speed=150
@@ -94,7 +100,7 @@ def rotations(self):
     Tstop=time.time()
     deltaT=Tstop-Tstart
     #print(deltaT)
-    blade_speed=60/deltaT
+    blade_speed=30/deltaT
     
             
 #Interrupt that triggers on the falling edge of when a magnet is sensed and calls the prog rotations
@@ -129,7 +135,7 @@ class table:
         tranclk.start(0)
         
     def move(dist,freq=50000,pin3=33): #Distance in inches that the table should move
-        global state
+     
         if dist>0:
             GPIO.output(29,0)
         else:
@@ -143,6 +149,8 @@ class table:
             time.sleep(1/(2*freq))
             GPIO.output(pin3,0)
             time.sleep(1/(2*freq))
+    def Move(dist):
+        _thread.start_new_thread(table.move,(dist,))
             
     def trans(freq):
         global transclk
@@ -167,6 +175,8 @@ class table:
         tranclk.ChangeDutyCycle(0)
     
 def stop():
+    global state
+    state=1
     table.stop()
     blade.stop()
 
@@ -178,7 +188,7 @@ def calc(num_pep):
     micro=16
     total_steps=steps*micro
     step_angle=360/total_steps
-    pps=blade_speed/60 #Pep per sec
+    pps=blade_speed/30 #Pep per sec
     
     T_rpm=60/(num_pep/pps)
     T_freq=T_rpm/((step_angle/360)*60) #Frequency to run table
@@ -211,157 +221,46 @@ def detect(channel):
 
 GPIO.add_event_detect(18,GPIO.FALLING, callback=detect,bouncetime=100)
 ########################################DEMO########################################
-def demo(size=14,speed=50):#speedmod coefficient to change speed of the whole script?
-    
-    if size==14:
-        table.move(5.25)
-        time.sleep(1)
-        blade.turn(speed)
-        table.turn(2026.133) #Turn pizza at 37.99rpm
-        time.sleep(1.6) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
-        blade.stop()
-        table.stop()
-        
-        table.move(-1.3)
-        blade.turn(speed)
-        table.turn(1013.333) #Turn the table at 19 rpm (1rpm=27Hz)
-        time.sleep(3.1578) #Wait 3.1578s for full rotation 8[pep]/4[pep/s]
-        blade.stop()
-        table.stop()
-    
-        table.move(-1.3)
-        blade.turn(speed)
-        table.turn(623.573) #Turn table at 11.692rpm
-        time.sleep(5.132)#Wait 5.132s for full rotation 13[pep]/4[pep/s]
-        blade.stop()
-        table.stop()
-        
-        table.move(-1.3)
-        blade.turn(speed)
-        table.turn(506.61) #Turn table at 9.499rpm
-        time.sleep(6.316)#Wait 6.316s for full rotation 16[pep]/4[pep/s]
-        blade.stop()
-        table.stop()
-        
-        blade.turn(speed)#Turn blade at 2500rpm
-        table.turn(426.667) #Turn table at 8rpm
-        time.sleep(7.5)#Wait 7.5s for full rotation 19[pep]/4[pep/s]
-        blade.stop()
-        table.stop()
-    
-        table.move(-.3)
-        
-    elif size==12:
-        blade.turn(speed)#Turn blade at 2500rpm
-        table.turn(500) #Turn table at 9.375rpm
-        time.sleep(6.4)#Wait 6.4s for full rotation 16pep]/4[pep/s]
-        blade.stop()
-        table.stop()
-    
-        table.move(1.6)
-        blade.turn(speed)
-        table.turn(727.2727) #Turn table at 13.636rpm
-        time.sleep(4.4)#Wait 4.4s for full rotation 16[pep]/4[pep/s]
-        blade.stop()
-        table.stop()
-    
-        table.move(1.75)
-        blade.turn(speed)
-        table.turn(1333.333) #Turn table at 25rpm
-        time.sleep(2.4) #Wait 2.4s for full rotation 13[pep]/4[pep/s]
-        blade.stop()
-        table.stop()
-    
-        table.move(2)
-        blade.turn(speed)
-        table.turn(0) #Turn the table at 0 rpm (1rpm=27Hz)
-        time.sleep(.4) #Wait 0.4s for full rotation 8[pep]/4[pep/s]
-        blade.stop()
-        table.stop()
-    
-        table.move(-5.35)
-        
-    elif size==10:
-        
-        table.move(4.25)     
-        blade.turn(speed)
-        table.turn(1600) #Turn table at 30 rpm for 5 pep
-        time.sleep(2) #Wait for 2s to get 5 pep
-        blade.stop()
-        table.stop()
-        
-        table.move(-1.5)
-        blade.turn(speed)
-        table.turn(800)#Turn table at 800Hz for 15 RPM
-        time.sleep(4) #Wait 4s for 10 pep
-        blade.stop()
-        table.stop()
-        
-        table.move(-1.6)
-        blade.turn(speed)
-        table.turn(533.3333) #Turn table at 533.33Hz for 10 rpm
-        time.sleep(6) #Wait 6s for 15 pep
-        blade.stop()
-        table.stop()
-        
-    elif size==7:
-        
-        table.move(5.5)
-        
-        blade.turn(speed)
-        time.sleep(.4) #Wait 0.4s for 1pep
-        blade.stop()
-        
-        table.move(-1.5)
-        blade.turn(speed)
-        table.turn(2000) #Turn table at 2000Hz for 37.5 rpm
-        time.sleep(1.6) #Wait 1.6s for 4 pep
-        blade.stop()
-        table.stop()
-        
-        table.move(-1.35)
-        blade.turn(speed)
-        table.turn(1000) #Turn table at 1000Hz for 18.75rpm
-        time.sleep(3.2) #Wait 3.2s for 8 pep
-        blade.stop()
-        table.stop()
-        
-        table.move(-2.65) #Move table to home
-        
+      
 global speed   
-speed=37  
+speed=37   
 
 def R_Large():
         global state
         open_popup()
-        state==0
-        table.move(5.5)
+        state=0
+        table.move(5.25)
+        time.sleep(.2)
+        global Tstart
+        global Tstop
+        Tstart=time.time()
+        Tstop=time.time()
         blade.turn(speed)
         advance(Large[4]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
         
-        table.move(-1.3)
+        table.Move(-1.5)
         advance(Large[3])    
     
-        table.move(-1.3)
-        blade.turn(speed)
+        table.Move(-1.3)
         advance(Large[2])
         
-        table.move(-1.3)
+        table.Move(-1.3)
         advance(Large[1])
 
-        table.move(-1.3)
+        table.Move(-1.3)
         advance(Large[0])
         blade.stop()
         table.stop()
     
-        table.move(-.3)
+        table.Move(-.3)
         top.destroy()
+        stop()
         
 def R_Medium():
         global state
         state=0
         open_popup()
-        table.move(3.7)
+        table.move(4.7)
         time.sleep(.2)
         blade.turn(speed)
         advance(Medium[3])
@@ -374,6 +273,7 @@ def R_Medium():
         
         table.move(-1.3)
         advance(Medium[0])
+        stop()
         
 def R_Small():
         global state
@@ -405,6 +305,42 @@ def R_indiv():
     table.move(-.25)
     advance(Indiv[0])
 
+
+def F_Large():
+        global state
+        open_popup()
+        state=0
+        table.move(6)
+        time.sleep(.2)
+        global Tstart
+        global Tstop
+        Tstart=time.time()
+        Tstop=time.time()
+        blade.turn(speed)
+        advance(FLarge[5]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
+        
+        table.move(-1.2)
+        advance(FLarge[4])    
+    
+        table.move(-1.3)
+        advance(FLarge[3])
+        
+        table.move(-1.3)
+        advance(FLarge[2])
+
+        table.move(-1.3)
+        advance(FLarge[1])
+    
+        table.move(-1.3)
+        advance(FLarge[0])
+        blade.stop()
+        table.stop()
+        
+        table.move(-.3)
+        top.destroy()
+        stop()
+        
+
 #******Screen Code*******
 text14=Button(window, text="14\"", font=font, bg="black", fg="white", command=R_Large,height=3, width=8)
 text14.place(x=470, y=70)
@@ -419,7 +355,7 @@ FullPep=Label(window, text="Full Pep:", font=font)
 FullPep.place(x=0,y=180)
 
 
-F_Large=Button(window, text="14\"", font=font, bg="black", fg="white", command=killscreen,  height=3, width=8)
+F_Large=Button(window, text="14\"", font=font, bg="black", fg="white", command=F_Large,  height=3, width=8)
 F_Large.place(x=470,y=215)
 F_Medium=Button(window,text="12\"",font=font,bg="black",fg="white",command=killscreen,height=3,width=8)
 F_Medium.place(x=320,y=215)
