@@ -118,6 +118,8 @@ def rotations(self):
     #print(deltaT)
     blade_speed=30/deltaT
     
+    if blade_speed>=160:
+                  stop()
             
 #Interrupt that triggers on the falling edge of when a magnet is sensed and calls the prog rotations
 GPIO.add_event_detect(12,GPIO.FALLING,callback=rotations,bouncetime=100)
@@ -129,11 +131,20 @@ class blade:
         global bladeclk
         bladeclk=GPIO.PWM(36,500) #Define Pin 36, 500Hz
         bladeclk.start(0) #Stop the blade
-    
+                  
     def turn(speed=0):
         global bladeclk
         bladeclk.ChangeDutyCycle(speed) #Change the duty cycle of blade motor to user input
         
+    def begin(SPEED):
+        global speed
+        global blade_speed
+        blade.turn(SPEED)
+        while blade_speed<20:
+                  SPEED=SPEED+1
+                  blade.turn(SPEED)
+        blade.turn(speed)
+                  
     def stop():
         blade.turn(0) #Stop the blade from spinning
         
@@ -253,7 +264,7 @@ GPIO.add_event_detect(18,GPIO.FALLING, callback=detect,bouncetime=100)
     
 #***********************Pizza Programs******************************#
       
-global speed   
+global speed                  
 speed=37   #Blade speed
 
 #Full Pep:    
@@ -268,7 +279,7 @@ def R_Large():
         global Tstop
         Tstart=time.time()
         Tstop=time.time()
-        blade.turn(speed)
+        blade.begin(speed)
         advance(Large[4])
         
         table.Move(-1.5)
@@ -296,7 +307,7 @@ def R_Medium():
         home()
         table.move(4.7) #Move table to first row
         time.sleep(.2)
-        blade.turn(speed)
+        blade.begin(speed)
         advance(Medium[3])
         
         table.move(-1.3)
@@ -317,7 +328,7 @@ def R_Small():
         open_popup()
         table.move(2.7) #Move table to first row
         time.sleep(.2)
-        blade.turn(speed)
+        blade.begin(speed)
         advance(Small[2])
         
         table.move(-1.3)
@@ -336,7 +347,7 @@ def R_indiv():
     open_popup()
     table.move(1.2) #Move table to first row
     time.sleep(.2)
-    blade.turn(speed)
+    blade.begin(speed)
     advance(Indiv[2])
        
     table.move(-.75)
@@ -360,7 +371,7 @@ def F_Large():
         global Tstop
         Tstart=time.time()
         Tstop=time.time()
-        blade.turn(speed)
+        blade.begin(speed)
         advance(FLarge[5])
         
         table.move(-1.2)
@@ -394,7 +405,7 @@ def F_Medium():
         global Tstop
         Tstart=time.time()
         Tstop=time.time()
-        blade.turn(speed)
+        blade.begin(speed)
         advance(FMedium[4])
         
         table.move(-1.2)
@@ -423,7 +434,7 @@ def F_Small():
         global Tstop
         Tstart=time.time()
         Tstop=time.time()
-        blade.turn(speed)
+        blade.begin(speed)
         advance(FSmall[3])
         
         table.move(-1.2)
@@ -449,7 +460,7 @@ def F_Indiv():
         global Tstop
         Tstart=time.time()
         Tstop=time.time()
-        blade.turn(speed)
+        blade.begin(speed)
         advance(FIndiv[2])
         
         table.move(-1.2)
@@ -461,6 +472,51 @@ def F_Indiv():
         home()
         top.destroy()
         stop()                  
+
+ def Large_Index():
+        global speed
+        global state
+        open_popup()    
+        state=0
+        table.move(6) #Move table to first row
+        time.sleep(.2)
+        global Tstart
+        global Tstop
+        Tstart=time.time()
+        Tstop=time.time()
+        blade.begin(speed)
+        advance(FLarge[5])
+        
+        blade.turn(speed/2)
+        table.move(-1.2)
+        blade.turn(speed)
+        advance(FLarge[4])    
+    
+        blade.turn(speed/2)
+        table.move(-1.3)
+        blade.turn(speed)          
+        advance(FLarge[3])
+        
+        blade.turn(speed/2)          
+        table.move(-1.3)
+        blade.turn(speed)          
+        advance(FLarge[2])
+        
+        blade.turn(speed/2)          
+        table.move(-1.3)
+        table.turn(speed)         
+        advance(FLarge[1])
+        
+        table.turn(speed/2)         
+        table.move(-1.3)
+        table.turn(speed)          
+        advance(FLarge[0])
+        blade.stop()
+        table.stop()
+        
+        home()
+        top.destroy()
+        stop()
                   
 #40 on 60; 14"
 def Finish_Large():
@@ -473,7 +529,7 @@ def Finish_Large():
         global Tstop
         Tstart=time.time()
         Tstop=time.time()
-        blade.turn(speed)
+        blade.begin(speed)
         advance(Finish_Large[4])
         
         table.Move(-1.5)
@@ -493,9 +549,7 @@ def Finish_Large():
         home()
         top.destroy()
         stop()
-    
-                  
-                  
+                        
 #14" Spiral
 def Spiral():
     global state
@@ -510,7 +564,7 @@ def Spiral():
     table.trans(-1,1000)
     table.turn(1250)
     time.sleep(.2)
-    advance(Large[4]) #Wait 1.6s for full rotation 4[pep]/4[pep/s]
+    advance(Large[4])
     table.trans(-1,1000)
     table.turn(1100)
     advance(Large[3])
