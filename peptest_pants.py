@@ -95,14 +95,13 @@ global blade_speed  #Blade speed var for instantaneous blade speed
 global Tstart
 global Tstop
 global state
-    
 global revolutions
 
 #***********************Variable Initialization******************************#
 n_pep=0 #Initialize pep cut
 blade_speed=150 #Initialize blade speed
 state=0 #Initialize the state variable for cancelling
-    
+Tstop=time.time()
 #***********************Rotary Interrupt******************************#
 #Detects magnet indicating half rotation; Calculates blade speed
 def rotations(self):
@@ -117,8 +116,10 @@ def rotations(self):
     deltaT=Tstop-Tstart
     #print(deltaT)
     blade_speed=30/deltaT
+    print(blade_speed)
     
-    if blade_speed>=160:
+    if n_pep>8:
+        if blade_speed>=200:
                   stop()
             
 #Interrupt that triggers on the falling edge of when a magnet is sensed and calls the prog rotations
@@ -264,7 +265,7 @@ GPIO.add_event_detect(18,GPIO.FALLING, callback=detect,bouncetime=100)
     
 #***********************Pizza Programs******************************#
 global speed   
-speed=36   
+speed=20   
 
 #Full Pep:    
 def R_Large():
