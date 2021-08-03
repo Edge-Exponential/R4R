@@ -1,4 +1,4 @@
-mimport RPi.GPIO as GPIO
+import RPi.GPIO as GPIO
 import time
 import datetime
 import sys
@@ -82,7 +82,7 @@ FMedium=2*np.array([28,21,15,8,1]) #Full Medium
 Finish_Medium=2*np.array([12,10,9,7])
 
 Small=2*np.array([15,10,5])
-FSmall=2*np.array([22,16,9,3)]
+FSmall=2*np.array([22,16,9,3])
 Finish_Small=2*np.array([7,6,4])
                   
 Indiv=2*np.array([8,4,1])
