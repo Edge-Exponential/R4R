@@ -78,9 +78,16 @@ FLarge=2*np.array([33,27,20,18,6,1]) #Full Large
 Finish_Large=2*np.array([13,10,7,12,2]) #40 on 60 Large
 
 Medium=2*np.array([16,11,6,1]) #R4R Medium
-FMedium=2*np.array([
-Small=[15,10,5]
-Indiv=[8,4,1]
+FMedium=2*np.array([28,21,15,8,1]) #Full Medium
+Finish_Medium=2*np.array([12,10,9,7])
+
+Small=2*np.array([15,10,5])
+FSmall=2*np.array([22,16,9,3)]
+Finish_Small=2*np.array([7,6,4])
+                  
+Indiv=2*np.array([8,4,1])
+FIndiv=2*np.array([12,7,1])
+Finish_Indiv=2*np.array([4,3])
 
 #***********************Variable Declaration******************************#
 global n_pep    #Pep cut variable
@@ -376,7 +383,85 @@ def F_Large():
         home()
         top.destroy()
         stop()
+                  
+def F_Medium():
+        global state
+        open_popup()    
+        state=0
+        table.move(6) #Move table to first row
+        time.sleep(.2)
+        global Tstart
+        global Tstop
+        Tstart=time.time()
+        Tstop=time.time()
+        blade.turn(speed)
+        advance(FMedium[4])
+        
+        table.move(-1.2)
+        advance(FMedium[3])    
+    
+        table.move(-1.3)
+        advance(FMedium[2])
+        
+        table.move(-1.3)
+        advance(FMedium[1])
 
+        table.move(-1.3)
+        advance(FMedium[0])
+        
+        home()
+        top.destroy()
+        stop()
+                  
+def F_Small():
+        global state
+        open_popup()    
+        state=0
+        table.move(6) #Move table to first row
+        time.sleep(.2)
+        global Tstart
+        global Tstop
+        Tstart=time.time()
+        Tstop=time.time()
+        blade.turn(speed)
+        advance(FSmall[3])
+        
+        table.move(-1.2)
+        advance(FSmall[2])    
+    
+        table.move(-1.3)
+        advance(FSmall[1])
+        
+        table.move(-1.3)
+        advance(FSmall[0])
+        
+        home()
+        top.destroy()
+        stop()                  
+
+def F_Indiv():
+        global state
+        open_popup()    
+        state=0
+        table.move(6) #Move table to first row
+        time.sleep(.2)
+        global Tstart
+        global Tstop
+        Tstart=time.time()
+        Tstop=time.time()
+        blade.turn(speed)
+        advance(FIndiv[2])
+        
+        table.move(-1.2)
+        advance(FIndiv[1])    
+    
+        table.move(-1.3)
+        advance(FIndiv[0])
+        
+        home()
+        top.destroy()
+        stop()                  
+                  
 #40 on 60; 14"
 def Finish_Large():
         global state
@@ -409,6 +494,8 @@ def Finish_Large():
         top.destroy()
         stop()
     
+                  
+                  
 #14" Spiral
 def Spiral():
     global state
