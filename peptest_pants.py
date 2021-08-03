@@ -1,4 +1,4 @@
-import RPi.GPIO as GPIO
+mimport RPi.GPIO as GPIO
 import time
 import datetime
 import sys
@@ -596,11 +596,11 @@ text07.place(x=20, y=70)
 #Full Pep Button:
 F_Large=Button(window, text="14\"", font=font, bg="black", fg="white", command=F_Large,  height=3, width=8)
 F_Large.place(x=470,y=215)
-F_Medium=Button(window,text="12\"",font=font,bg="black",fg="white",command=killscreen,height=3,width=8)
+F_Medium=Button(window,text="12\"",font=font,bg="black",fg="white",command=F_Medium,height=3,width=8)
 F_Medium.place(x=320,y=215)
-F_Small=Button(window,text="10\"",font=font,bg="black",fg="white",command=killscreen,height=3,width=8)
+F_Small=Button(window,text="10\"",font=font,bg="black",fg="white",command=F_Small,height=3,width=8)
 F_Small.place(x=170,y=215)
-F_indiv=Button(window,text="7\"",font=font,bg="black",fg="white",command=killscreen,height=3,width=8)
+F_indiv=Button(window,text="7\"",font=font,bg="black",fg="white",command=F_Indiv,height=3,width=8)
 F_indiv.place(x=20,y=215)
 
 #Safety and Functional Buttons:
