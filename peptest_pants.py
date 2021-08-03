@@ -229,7 +229,7 @@ GPIO.add_event_detect(18,GPIO.FALLING, callback=detect,bouncetime=100)
 ########################################DEMO########################################
       
 global speed   
-speed=37   
+speed=36   
 
 def R_Large():
         global state
@@ -348,7 +348,7 @@ def F_Large():
         
 def Finish_Large():
         global state
-        open_popup()
+        #open_popup()
         state=0
         table.move(5.25)
         time.sleep(.2)
@@ -374,7 +374,7 @@ def Finish_Large():
         table.stop()
     
         table.Move(-.3)
-        top.destroy()
+        #top.destroy()
         stop()
     
 
@@ -401,8 +401,8 @@ def Spiral():
     table.turn(625)
     table.trans(-1,650)
     advance(Large[1])
-    table.turn(500)
-    table.trans(500 )
+    table.turn(450)
+    table.trans(450 )
     advance(Large[0])
     state=1
     blade.stop()
