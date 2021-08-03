@@ -73,9 +73,9 @@ def open_popup(): #Opens a popup window that the user can use to cancel pep choi
 
 #***********************Arrays******************************#
 #Arrays multiplied by two to account for both magnets (2mag=1pep)
-Large=2*np.array([20,17,13,6,4]) #R4R Large
-FLarge=2*np.array([33,27,20,18,6,1]) #Full Large
-Finish_Large=2*np.array([13,10,7,12,2]) #40 on 60 Large
+Large=2*np.array([20,17,13,6,4])+1 #R4R Large
+FLarge=2*np.array([33,27,20,18,6,1])+1 #Full Large
+Finish_Large=2*np.array([13,10,7,12,2])+1 #40 on 60 Large
 
 Medium=2*np.array([16,11,6,1]) #R4R Medium
 FMedium=2*np.array([28,21,15,8,1]) #Full Medium
