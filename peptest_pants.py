@@ -43,6 +43,7 @@ def cancel():   #Changes state variable to cancel pep choice
     global top
     state=1
     stop()
+    time.sleep(1.5)
     top.destroy()
     
 stopFont=font.Font(family='Helvetica', size=50, weight='bold')
@@ -66,11 +67,20 @@ def open_popup(): #Opens a popup window that the user can use to cancel pep choi
     top=Toplevel(window)
     top.overrideredirect(1)
     top.geometry("800x480")
-    top.title("Stop Window")
+    top.title("Cancel Window")
     Label(top, text="Press Button to Cancel",font=font).place(x=185,y=0)
     Button(top,text="CANCEL",bg="red",fg="white",command=cancel,height=15,width=25).place(x=205,y=100) #Button to cancel pep choice
     Button(top,text="EXIT",command=top.destroy).place(x=290,y=375) #Button to exit the popup
 
+
+def alert():
+    global a_win
+    a_win=Toplevel(window)
+    a_win.overrideredirect(1)
+    a_win.geometry('800x480')
+    a_win.title("Alert")
+    Label(a_win, text="Fix Pep Stick, then hit EXIT",font=font).place(x=165,y=215)
+    Button(a_win,text="EXIT",command=a_win.destroy).place(x=290,y=375)
 #***********************Arrays******************************#
 #Arrays multiplied by two to account for both magnets (2mag=1pep)
 Large=2*np.array([20,17,13,6,4])+1 #R4R Large
@@ -121,6 +131,7 @@ def rotations(self):
     if n_pep>8:
         if blade_speed>=200:
                   stop()
+                  alert()
             
 #Interrupt that triggers on the falling edge of when a magnet is sensed and calls the prog rotations
 GPIO.add_event_detect(12,GPIO.FALLING,callback=rotations,bouncetime=100)
@@ -243,7 +254,7 @@ def advance(pep_need):
         window.update()
         calc(pep_need)
     n_pep=0 #Reset pep cut to start next row
-
+    print('Done')
 #Homes the table
 def home():
     while GPIO.input(18)==1:
@@ -265,13 +276,13 @@ GPIO.add_event_detect(18,GPIO.FALLING, callback=detect,bouncetime=100)
     
 #***********************Pizza Programs******************************#
 global speed   
-speed=20   
+speed=33   
 
 #Full Pep:    
 def R_Large():
         global state
         state=0 #Ensure the program will run advance()
-        open_popup() #Open cance window
+        open_popup() #Open cancel window
         home()
         table.move(5.25) #Move table to first row
         time.sleep(.2)
@@ -480,34 +491,36 @@ def Large_Index():
         state=0
         table.move(6) #Move table to first row
         time.sleep(.2)
+        #table.turn(500)
         global Tstart
         global Tstop
         Tstart=time.time()
         Tstop=time.time()
         blade.begin(speed)
         advance(FLarge[5])
+        print('first')
         
-        blade.turn(speed/2)
+        blade.turn(20)
         table.move(-1.2)
         blade.turn(speed)
         advance(FLarge[4])    
     
-        blade.turn(speed/2)
+        blade.turn(20)
         table.move(-1.3)
         blade.turn(speed)          
         advance(FLarge[3])
         
-        blade.turn(speed/2)          
+        blade.turn(20)          
         table.move(-1.3)
         blade.turn(speed)          
         advance(FLarge[2])
         
-        blade.turn(speed/2)          
+        blade.turn(20)          
         table.move(-1.3)
         table.turn(speed)         
         advance(FLarge[1])
         
-        table.turn(speed/2)         
+        table.turn(20)         
         table.move(-1.3)
         table.turn(speed)          
         advance(FLarge[0])
@@ -609,6 +622,7 @@ homeButton.place(x=5,y=400)
 StopButton=Button(window,text="STOP", font=font,bg="red",fg="white",command=stop(),height=3,width=11)
 StopButton.place(x=220,y=367)
     
-Button(window,text="Cancel Popup",command=open_popup).place(x=5,y=350)
-
+Button(window,text="Cancel Popup",command=open_popup).place(x=5,y=330)
+Button(window,text="Large_Index",command=Large_Index).place(x=5,y=365)
+Button(window,text="Alert",command=alert).place(x=580,y=330)
 window.mainloop()
