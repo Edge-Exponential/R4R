@@ -1,10 +1,11 @@
 import RPi.GPIO as GPIO
 import serial
 import time
-import datetime
+import threading
+import matplotlib.pyplot as plt
   
 #***********************************VARIABLE DECLARATIONS***********************************
-TargetWeight={
+Weight={
     7:.10,
     10:.22,
     12:.32,
@@ -13,11 +14,7 @@ TargetWeight={
 dW=-.1 #weight diff: actual v. target
 
 #***************************************MOTOR SET UP****************************************
-pin_tturnclk=36
-pin_noid7=16
-pin_noid10=15
-pin_noid12=13
-pin_noid14=12
+pin_tturnclk=15
 pin_stepclk=37
 pin_stepdir=35
 pin_dcr=11
@@ -26,23 +23,78 @@ GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
 
 GPIO.setup(pin_tturnclk, GPIO.OUT) #tableturn clk
-GPIO.setup(pin_noid7, GPIO.OUT) #Relay for solenoid 7
-GPIO.setup(pin_noid10, GPIO.OUT) #Relay for solenoid 10
-GPIO.setup(pin_noid12, GPIO.OUT) #Relay for solenoid 12
-GPIO.setup(pin_noid14, GPIO.OUT) #Relay for solenoid 14
 GPIO.setup(pin_stepdir, GPIO.OUT) #DM860T dir
 GPIO.setup(pin_stepclk, GPIO.OUT) #DM860T clk
 
-#make the dc motor chill out
-GPIO.setup(pin_dcl,GPIO.OUT)
-GPIO.output(pin_dcl,GPIO.LOW)
-GPIO.setup(pin_dcr,GPIO.OUT)
-GPIO.output(pin_dcr,GPIO.LOW)
-
-
 #******************************************FUNCTIONS******************************************
+def quickrun(x0):
+    for i in range(x0):
+        GPIO.output(pin_tturnclk,1)
+        time.sleep(0.3/x0)
+        GPIO.output(pin_tturnclk,0)
+        time.sleep(0.3/x0)
+    
+def chz(size=14,adj=1):
+    ustep=8 #microstep setting on stepper driver
+    dstep=[64] #initial speed (steps per quickrun)
+    i_wt=2
+    d_wt=.3
         
+    dsdw=int(200*ustep/Weight[size]) #target weight for derivative slice
+    scale.tare()
+    step.turn(round(600*size/14))
+    #turn on vibrating conveyor 100%
+    chzwt=[scale.read()]
+    timeout=0
+    while chzwt[0]==0 and timeout<5:
+        chzwt=[scale.read()]
+        timeout=0
+    step_total=0 #total steps
+    ichange=[1]
+    dchange=[1]
+    while step_total<200*ustep: #200 step/rev * 8 microstep
+        tturn=threading.Thread(target=quickrun,args=(dstep[-1],))
+        tturn.start()
+        chzwt.append(scale.read())
+        step_total=sum(dstep)
+        ichange.append((200*ustep*chzwt[-1]/(step_total*Weight[size]))**i_wt)
+        dchange.append(((chzwt[-1]-chzwt[-2])*dsdw/dstep[-1])**d_wt)
+        print(dstep[-1],'\t d:',round(dchange[-1],3),', i:',round(ichange[-1],3))
+        dstep.append(int(dstep[-1]*dchange[-1]*ichange[-1]))
+        if dstep[-1]<20: dstep[-1]=20
+        if dstep[-1]>1000: dstep[-1]=1000
+        tturn.join()
+    step.stop()
+    #conveyor stop
+    table.stop()
+    time.sleep(.5)
+    chzwt.append(scale.read())
+    plt.plot(list(range(len(chzwt))),chzwt,label='wt.')
+    plt.plot(list(range(len(dchange))),dchange,label='d')
+    plt.plot(list(range(len(ichange))),ichange,label='i')
+    x=round(chzwt[-1]-Weight[size],3)
+    print(chzwt[-1],'-',Weight[size],'=',x)
+    plt.show()
+    return x
 
+# def chz(size=14,adj=0):
+#     table.turn(600)
+#     scale.tare()
+#     chzwt=[scale.read()]
+#     #turn on vibrating conveyor 100%
+#     step.turn(200)
+#     while chzwt[-1]<TargetWeight[size]+adj:
+#         #time.sleep(.2)
+#         chzwt.append(scale.read())    
+#     step.stop()
+#     #conveyor stop
+#     table.stop()
+#     time.sleep(.5)
+#     chzwt.append(scale.read())
+#     print(chzwt[-8:-1])
+#     x=round(chzwt[-1]-TargetWeight[size],3)
+#     print(chzwt[-1],'-',TargetWeight[size],'=',x)
+#     return x
 class step:
     def init(freq=100,pin=pin_stepclk):
         global stepclk
@@ -67,29 +119,7 @@ class step:
     def stop():
         step.turn(1)
         stepclk.ChangeDutyCycle(0)
-   
-def chz(size=14,adj=0):
-    mask(size)
-    time.sleep(1)
-    table.turn(600)
-    dc.go(3*size)
-    scale.tare()
-    chzwt=[scale.read()]
-    step.turn(1000)
-    while chzwt[-1]<TargetWeight[size]+adj:
-        #time.sleep(.2)
-        chzwt.append(scale.read())    
-    step.stop()
-    time.sleep(1)
-    stop()
-    time.sleep(.5)
-    chzwt.append(scale.read())
-    time.sleep(.01)
-    print(chzwt[-12:-1])
-    print(chzwt[-1])
-    x=round(chzwt[-1]-TargetWeight[size],3)
-    print(chzwt[-1],'-',TargetWeight[size],'=',x)
-    return x
+
 class table:
     def init(pin_turn=pin_tturnclk):
         global turnclk
@@ -105,24 +135,7 @@ class table:
     def stop():
         global turnclk
         turnclk.ChangeDutyCycle(0)
-def mask(size):
-        GPIO.output(pin_noid7,size==7)
-        GPIO.output(pin_noid10,size==10)
-        GPIO.output(pin_noid12,size==12)
-        GPIO.output(pin_noid14,size==14)
-class dc:
-    def init():
-        global dcclk
-        dcclk=GPIO.PWM(pin_dcr,500)
-        dcclk.start(0)
-    def go(speed=100):
-        global dcclk
-        dcclk.ChangeDutyCycle(speed)
-def stop():
-    dc.go(0)
-    mask(0)
-    step.stop()
-    table.stop()
+
 class scale:
     def init():
         global ser
@@ -130,6 +143,8 @@ class scale:
         ser.port = "/dev/ttyUSB0"
         ser.baudrate = 9600
         ser.timeout = .1
+        try: ser.open()
+        except FileNotFoundError: print('USB not found')
         scaleWeight = 0
     def read():
         global ser
@@ -155,10 +170,6 @@ class scale:
         ser.write(b'TK\n')
         ser.reset_input_buffer()
 
-   
-#########################################INITIALIZE################################
-step.init()
-GPIO.output(pin_stepdir,1)
-table.init()
-dc.init()
 scale.init()
+table.init()
+step.init()
