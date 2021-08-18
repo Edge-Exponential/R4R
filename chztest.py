@@ -1,14 +1,19 @@
 import RPi.GPIO as GPIO
+import serial
 import time
 import datetime
   
 #***********************************VARIABLE DECLARATIONS***********************************
-
+TargetWeight={
+    7:.10,
+    10:.22,
+    12:.32,
+    14:.44
+    }
+dW=-.1 #weight diff: actual v. target
 
 #***************************************MOTOR SET UP****************************************
 pin_tturnclk=36
-pin_tmoveclk=29
-pin_tmovedir=31
 pin_noid7=16
 pin_noid10=15
 pin_noid12=13
@@ -21,8 +26,6 @@ GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
 
 GPIO.setup(pin_tturnclk, GPIO.OUT) #tableturn clk
-GPIO.setup(pin_tmovedir, GPIO.OUT) #tabletran dir
-GPIO.setup(pin_tmoveclk, GPIO.OUT) #tabletran clk
 GPIO.setup(pin_noid7, GPIO.OUT) #Relay for solenoid 7
 GPIO.setup(pin_noid10, GPIO.OUT) #Relay for solenoid 10
 GPIO.setup(pin_noid12, GPIO.OUT) #Relay for solenoid 12
@@ -65,62 +68,33 @@ class step:
         step.turn(1)
         stepclk.ChangeDutyCycle(0)
    
-class chz:
-    def mask(size=14,timeadj=1.08):
-        mask(size)
-        time.sleep(1)
-        table.turn(400)
-        dc.go(3.6*size)#13%DC for warm dry shred, 11 for cold wet fresh
-        step.turn(1000)
-        time.sleep(.9*size*size/19.6*timeadj)
-        dc.go(15)
-        time.sleep(.1*size*size/19.6*timeadj)
-        step.stop()
-        stop()
-        time.sleep(1)
-        dc.go(0)
-        mask(0)
-        
-    def spiral(speed=3,feed=300,dist=1.83):
-        inps=speed/6.28 #inch per second
-        spsr=inps*1600 #steps per second-radius; multiply by radius for motor speed
-        dc.go(20)
-        step.turn(feed)
-        table.turn(500)
-        time.sleep(1)
-        for radius in [dist,2*dist,3*dist]:
-            table.move(-dist)
-            table.turn(spsr/radius) #inps/circumference=rpm 
-            time.sleep(radius/inps)#Wait for full rotation   
-        table.stop()
-        step.stop()
-        dc.go(0)
-        
+def chz(size=14,adj=0):
+    mask(size)
+    time.sleep(1)
+    table.turn(600)
+    dc.go(3*size)
+    scale.tare()
+    chzwt=[scale.read()]
+    step.turn(1000)
+    while chzwt[-1]<TargetWeight[size]+adj:
+        #time.sleep(.2)
+        chzwt.append(scale.read())    
+    step.stop()
+    time.sleep(1)
+    stop()
+    time.sleep(.5)
+    chzwt.append(scale.read())
+    time.sleep(.01)
+    print(chzwt[-12:-1])
+    print(chzwt[-1])
+    x=round(chzwt[-1]-TargetWeight[size],3)
+    print(chzwt[-1],'-',TargetWeight[size],'=',x)
+    return x
 class table:
-    def init(pin_turn=pin_tturnclk,pin_move=pin_tmoveclk):
+    def init(pin_turn=pin_tturnclk):
         global turnclk
         turnclk=GPIO.PWM(pin_turn,500)
         turnclk.start(0)
-        global tranclk
-        tranclk=GPIO.PWM(pin_move,1000)
-        tranclk.start(0)
-        
-    def move(dist,freq=20000,pin3=38): #Distance in inches that the table should move
-        if dist>0:
-            GPIO.output(36,1)
-        else:
-            GPIO.output(36,0)
-            
-        global REV
-        REV=abs(dist)*200*16/(3.1415926536*.411) #Convert distance to steps on motor
-        REV=round(REV)
-        print(REV)
-        for i in range(0,REV):
-            GPIO.output(pin3,1)
-            time.sleep(1/(2*freq))
-            GPIO.output(pin3,0)
-            time.sleep(1/(2*freq))
-        
     def turn(freq):
         global turnclk
         if freq==0:
@@ -128,7 +102,6 @@ class table:
         else:
             turnclk.ChangeDutyCycle(50)
             turnclk.ChangeFrequency(freq)
-        
     def stop():
         global turnclk
         turnclk.ChangeDutyCycle(0)
@@ -145,18 +118,47 @@ class dc:
     def go(speed=100):
         global dcclk
         dcclk.ChangeDutyCycle(speed)
-   
-
 def stop():
     dc.go(0)
     mask(0)
     step.stop()
     table.stop()
-    
+class scale:
+    def init():
+        global ser
+        ser = serial.Serial()
+        ser.port = "/dev/ttyUSB0"
+        ser.baudrate = 9600
+        ser.timeout = .1
+        scaleWeight = 0
+    def read():
+        global ser
+        scaleWeight=-.1
+        if not ser.isOpen():
+            ser.open()
+        if ser.in_waiting > 220:
+            ser.reset_input_buffer()
+            print('bonk')
+        while ser.in_waiting < 22:
+            pass
+        b = ser.read_all().decode('utf-8')
+        bi=b.rfind('k')
+        if b[bi-8]=="-": fac=-1
+        else: fac=1
+        b3 = b[bi-5:bi-1].strip()
+        scaleWeight=round(float(b3)*fac*.80085,3)
+        return scaleWeight
+    def tare():
+        global ser
+        if not ser.isOpen():
+            ser.open()
+        ser.write(b'TK\n')
+        ser.reset_input_buffer()
 
-    
+   
 #########################################INITIALIZE################################
 step.init()
 GPIO.output(pin_stepdir,1)
 table.init()
 dc.init()
+scale.init()
