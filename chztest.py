@@ -66,13 +66,15 @@ class step:
         stepclk.ChangeDutyCycle(0)
    
 class chz:
-    def mask(size=14,timeadj=0):
+    def mask(size=14,timeadj=1.08):
         mask(size)
         time.sleep(1)
-        table.turn(800)
+        table.turn(400)
         dc.go(3.6*size)#13%DC for warm dry shred, 11 for cold wet fresh
         step.turn(1000)
-        time.sleep(size*size/19.6+timeadj)     
+        time.sleep(.9*size*size/19.6*timeadj)
+        dc.go(15)
+        time.sleep(.1*size*size/19.6*timeadj)
         step.stop()
         stop()
         time.sleep(1)
