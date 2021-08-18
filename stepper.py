@@ -21,6 +21,15 @@ class motor(object):
             self.pwm.start(50)
         except ValueError:
             self.pwm.start(0)
-        
+    def step(self,steps,freq):
+        GPIO.output(self.dir_pin,GPIO.LOW)
+        if freq<0:
+            GPIO.output(self.dir_pin,GPIO.HIGH)
+            freq=-freq
+        for i in range(steps):
+            GPIO.output(self.clk_pin,1)
+            time.sleep(1/freq)
+            GPIO.output(self.clk_pin,0)
+            time.sleep(1/freq)
     def stop(self):
-        self.pwm.start(0)
+        self.pwm.stop()

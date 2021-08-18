@@ -1,14 +1,13 @@
-peptest.py is a collection of object commands to control the R4R system
+peptest.py is a collection of object commands to control the R4R system.
+	It constantly evolves as the test bench for new methods
 
-class pep controls the DM860T stepper driver
-pep.init() creates a PWM object in Python
-pep.turn(freq) spins the motor a given speed (usually 100-1500)
-pep.stop() cleanly stops the motor
+peptest_pants.py runs the involute pep blade to the highest precision possible.
+	Features include: DC blade motor, pan rotation and translation stepper motors
+	Hall-effect encoder for overspeed e-stop, stall power ramp-up, and turntable speed adjustment
 
-class table controls the translation and rotation of the platter gantry
-table.init() creates a PWM object
-table.turn(freq) spins the motor to a given speed (usually 100-600)
-table.move(dist) cycles the belt. The whole travel is about dist=350
-table.stop() cleanly stops both motors but doesn't interrupt
+chztest.py runs an auger stepper, turntable stepper, and load cell for PID control.
+	Vibrating conveyor control has yet to be added.
 
-stop() will stop all motors
+stepper.py is a custom portable library to run stepper motors.
+
+mag_sensor.py is an archived Hall-effect encoder interrupt program
