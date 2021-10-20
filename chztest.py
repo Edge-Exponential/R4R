@@ -3,6 +3,7 @@ import serial
 import time
 import threading
 import matplotlib.pyplot as plt
+import stepper
   
 #***********************************VARIABLE DECLARATIONS***********************************
 Weight={
@@ -11,131 +12,102 @@ Weight={
     12:.32,
     14:.44
     }
-dW=-.1 #weight diff: actual v. target
+maskSpot={
+    7:7,
+    10:4,
+    12:2,
+    14:0
+}
 
 #***************************************MOTOR SET UP****************************************
-pin_tturnclk=15
-pin_stepclk=37
-pin_stepdir=35
-pin_dcr=11
-pin_dcl=7
 GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
-
-GPIO.setup(pin_tturnclk, GPIO.OUT) #tableturn clk
-GPIO.setup(pin_stepdir, GPIO.OUT) #DM860T dir
-GPIO.setup(pin_stepclk, GPIO.OUT) #DM860T clk
-
+GPIO.setup(7,GPIO.OUT)
+table=stepper.motor(15,13)
+auger=stepper.motor(37,35)
+mask=stepper.motor(24,26)
+class conveyor:
+    def go():
+        GPIO.output(7,1)
+    def stop():
+        GPIO.output(7,0)
 #******************************************FUNCTIONS******************************************
-def quickrun(x0):
-    for i in range(x0):
-        GPIO.output(pin_tturnclk,1)
-        time.sleep(0.3/x0)
-        GPIO.output(pin_tturnclk,0)
-        time.sleep(0.3/x0)
-    
 def chz(size=14,adj=1):
     ustep=8 #microstep setting on stepper driver
-    dstep=[64] #initial speed (steps per quickrun)
-    i_wt=2
-    d_wt=.3
-        
+    dstep=[64] #initial speed (steps per load cell sample)
+    maxspeed=300  #table max steps per 0.3 sec
+    minspeed=20 #table min steps per 0.3 sec
+    igain=1.5 #integral control parameter coefficient
+    dgain=.4 #derivative control parameter coefficient
     dsdw=int(200*ustep/Weight[size]) #target weight for derivative slice
+    sample_time=0.2 #calibrate to processor capacity
+    
     scale.tare()
-    step.turn(round(600*size/14))
-    #turn on vibrating conveyor 100%
-    chzwt=[scale.read()]
+    mask.step(maskSpot[size],100)
+    auger.turn(-round(600*size/14)) #this might need work
+    conveyor.go()
+    chzwt=[0,scale.read()]
     timeout=0
-    while chzwt[0]==0 and timeout<5:
-        chzwt=[scale.read()]
-        timeout=0
+#loop to stop if no cheese comes out
+    while chzwt[1]==0:
+        chzwt=[0,scale.read()]
+        timeout=timeout+1
+        if timeout>20:
+            print('no cheese')
+            auger.stop()
+            #conveyor stop
+            return None
     step_total=0 #total steps
     ichange=[1]
     dchange=[1]
-    while step_total<200*ustep: #200 step/rev * 8 microstep
-        tturn=threading.Thread(target=quickrun,args=(dstep[-1],))
+#loop to apply cheese
+    while step_total<200*ustep:
+        tturn=threading.Thread(target=table.step,args=(dstep[-1],dstep[-1]/sample_time,))
         tturn.start()
         chzwt.append(scale.read())
         step_total=sum(dstep)
-        ichange.append((200*ustep*chzwt[-1]/(step_total*Weight[size]))**i_wt)
-        dchange.append(((chzwt[-1]-chzwt[-2])*dsdw/dstep[-1])**d_wt)
-        print(dstep[-1],'\t d:',round(dchange[-1],3),', i:',round(ichange[-1],3))
+        if chzwt[-1]>Weight[size]:
+            print('weight')
+            break
+    #integral calculator
+        inext=(200*ustep*chzwt[-1]/(step_total*Weight[size]))**igain
+        if inext>1.5: inext=1.5
+        elif inext<.5: inext=.5
+        ichange.append(inext)
+    #derivative calculator
+        seg_wt=chzwt[-1]-chzwt[-2]
+        if seg_wt<.01: seg_wt=.01
+        dnext=((seg_wt)*dsdw/dstep[-1])**dgain
+        if dnext>1.5: dnext=1.5
+        elif dnext<.5: dnext=.5
+        dchange.append(dnext)
+    #assign next step count and prepare next loop    
+        print(dstep[-1])#,'\t d:',round(dchange[-1],3),', i:',round(ichange[-1],3))
         dstep.append(int(dstep[-1]*dchange[-1]*ichange[-1]))
-        if dstep[-1]<20: dstep[-1]=20
-        if dstep[-1]>1000: dstep[-1]=1000
+        if dstep[-1]<minspeed: dstep[-1]=minspeed
+        if dstep[-1]>maxspeed: dstep[-1]=maxspeed
         tturn.join()
-    step.stop()
-    #conveyor stop
-    table.stop()
+#stop all and run debug        
+    stop()
     time.sleep(.5)
     chzwt.append(scale.read())
+    x=round(chzwt[-1]-Weight[size],3)
+    print(chzwt[-1],'-',Weight[size],'=',x)
+    mask.step(-maskSpot[size],100)
+    
     plt.plot(list(range(len(chzwt))),chzwt,label='wt.')
     plt.plot(list(range(len(dchange))),dchange,label='d')
     plt.plot(list(range(len(ichange))),ichange,label='i')
-    x=round(chzwt[-1]-Weight[size],3)
-    print(chzwt[-1],'-',Weight[size],'=',x)
+    plt.legend()
     plt.show()
-    return x
-
-# def chz(size=14,adj=0):
-#     table.turn(600)
-#     scale.tare()
-#     chzwt=[scale.read()]
-#     #turn on vibrating conveyor 100%
-#     step.turn(200)
-#     while chzwt[-1]<TargetWeight[size]+adj:
-#         #time.sleep(.2)
-#         chzwt.append(scale.read())    
-#     step.stop()
-#     #conveyor stop
-#     table.stop()
-#     time.sleep(.5)
-#     chzwt.append(scale.read())
-#     print(chzwt[-8:-1])
-#     x=round(chzwt[-1]-TargetWeight[size],3)
-#     print(chzwt[-1],'-',TargetWeight[size],'=',x)
-#     return x
-class step:
-    def init(freq=100,pin=pin_stepclk):
-        global stepclk
-        global oldfreq
-        oldfreq=freq
-        stepclk=GPIO.PWM(pin,freq)
-        stepclk.start(0)
-    
-    def turn(newfreq):
-        if newfreq<1:
-            newfreq=1
-        global oldfreq
-        global stepclk
-        stepclk.ChangeDutyCycle(50)
-        for i in range(oldfreq,newfreq,50*(2*(newfreq>oldfreq)-1)):
-            stepclk.ChangeFrequency(i)
-            time.sleep(.03)
-        oldfreq=newfreq
-        
-    def rev():
-        GPIO.output(35,1-GPIO.input(35))
-    def stop():
-        step.turn(1)
-        stepclk.ChangeDutyCycle(0)
-
-class table:
-    def init(pin_turn=pin_tturnclk):
-        global turnclk
-        turnclk=GPIO.PWM(pin_turn,500)
-        turnclk.start(0)
-    def turn(freq):
-        global turnclk
-        if freq==0:
-            turnclk.ChangeDutyCycle(0)
-        else:
-            turnclk.ChangeDutyCycle(50)
-            turnclk.ChangeFrequency(freq)
-    def stop():
-        global turnclk
-        turnclk.ChangeDutyCycle(0)
-
+def stop():
+    auger.stop()
+    mask.stop()
+    table.stop()
+    conveyor.stop()
+def prime():
+    auger.step(500,300)
+    auger.step(1800,-300)
 class scale:
     def init():
         global ser
@@ -171,5 +143,43 @@ class scale:
         ser.reset_input_buffer()
 
 scale.init()
-table.init()
-step.init()
+
+#***********Initialize Screen***********#
+from tkinter import *
+window=Tk() #Create a window
+
+def killscreen():   #Program kills main window
+    window.destroy()
+
+def cancel():   #Changes state variable to cancel pep choice
+    global state
+    global top
+    state=1
+    stop()
+    time.sleep(1.5)
+    top.destroy()
+
+window.overrideredirect(1) #Full screen if uncommented
+window.geometry('480x520')
+window.title("Sm^rt Chz")
+#Window label:
+namelabel=Label(window, text="Sm^rt Chz",)
+namelabel.place(x=200,y=0)
+
+#R4R Buttons:
+text14=Button(window, text="14\"", bg="black", fg="white", command=lambda:chz(14),height=10,width=20)
+text14.place(x=250, y=230)
+text12=Button(window, text="12\"", bg="black", fg="white", command=lambda:chz(12),height=10,width=20)
+text12.place(x=20, y=230)
+text10=Button(window, text="10\"", bg="black", fg="white", command=lambda:chz(10),height=10,width=20)
+text10.place(x=250, y=30)
+text07=Button(window, text="7\"", bg="black", fg="white", command=lambda:chz(7),height=10,width=20)
+text07.place(x=20, y=30)
+
+#Safety and Functional Buttons:
+exitbutton= Button(window, text="EXIT",bg="green", fg="white", command=killscreen,height=5, width=11)
+exitbutton.place(x=330, y=430)
+StopButton=Button(window,text="STOP",bg="red",fg="white",command=stop(),height=5,width=11)
+StopButton.place(x=20,y=430)
+
+window.mainloop()
