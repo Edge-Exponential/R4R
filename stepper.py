@@ -17,18 +17,19 @@ class motor(object):
         GPIO.output(self.dir_pin,GPIO.LOW)
         if freq<0:
             GPIO.output(self.dir_pin,GPIO.HIGH)
-            freq=-freq
+        freq=int(abs(freq))
         try:
             self.pwm.ChangeFrequency(freq)
             self.pwm.start(50)
             self.freq=freq
         except ValueError:
             self.pwm.start(0)
-    def ramp(self,freq,dur=2):
-        increment=round((freq-self.freq)/(dur*10))
+    def ramp(self,freq,dur=1):
+        freq=int(freq)
+        increment=int((freq-self.freq)/(dur*10))
         for i in range(self.freq,freq+increment,increment):
             if i<0:
-                i=-i
+                i=abs(i)
                 GPIO.output(self.dir_pin,GPIO.HIGH)
             else: GPIO.output(self.dir_pin,GPIO.LOW)
             try:
@@ -40,9 +41,10 @@ class motor(object):
         self.freq=freq
     def step(self,steps,freq):
         GPIO.output(self.dir_pin,GPIO.LOW)
-        if freq<0:
+        if steps<0 or freq<0:
             GPIO.output(self.dir_pin,GPIO.HIGH)
-            freq=-freq
+        freq=int(abs(freq))
+        steps=int(abs(steps))
         self.freq=freq
         for i in range(steps):
             GPIO.output(self.clk_pin,1)
