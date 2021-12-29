@@ -8,28 +8,29 @@ import PIL.Image,PIL.ImageDraw,PIL.ImageTk
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
-lim_pin=18
-hall_pin=12
-n=0
-GPIO.setup(lim_pin,GPIO.IN, pull_up_down=GPIO.PUD_UP) #limit switch 
-GPIO.setup(hall_pin,GPIO.IN, pull_up_down=GPIO.PUD_UP) #blade encoder
-
-pep=stepper.motor(36,35)
+lim_pin=18 #gantry limit switch
+hall_pin=12 #blade shaft encoder (1 blip per rev)
+ena_pin=16 #stepper motor enable, 1=disable to keep temps down
+GPIO.setup(lim_pin,GPIO.IN, pull_up_down=GPIO.PUD_UP) 
+GPIO.setup(hall_pin,GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.setup(ena_pin,GPIO.OUT)
+pep=stepper.motor(33,29)
 tturn=stepper.motor(11,15)
-ttran=stepper.motor(33,29)
+ttran=stepper.motor(21,23)
 tlift=stepper.motor(38,40)
 
-pep_ratio=800*14/18  #steps/bladerev
-ttran_ratio=3200    #setps/transrev
+pep_ratio=1600*14/18  #steps/bladerev
+ttran_ratio=200*16    #steps/transrev
 tturn_ratio=200*8     #steps/tablerev
 tlift_ratio=200*8  #steps/rev (12mm pitch)
-
+n=0
 shutdown=0
 
 #***********************MechanicalFunctions******************************#   
-def in2step(inch):
-    return int(inch*ttran_ratio/(3.14159*.902)) #Convert distance to steps on motor
+def in2step(inch,pulleydiam=1.337):
+    return int(inch*ttran_ratio/(3.14159*pulleydiam)) #Convert distance to steps on motor
 def home():
+    GPIO.output(ena_pin,GPIO.LOW)
     ttran.turn(12000)
     while GPIO.input(lim_pin): time.sleep(.03)
     ttran.stop()
@@ -43,11 +44,23 @@ def lift(size=14):
     else: reverse=-1
     m={14:1000,12:2000,10:3000,7:4000}
     tlift.step(reverse*m[size],15000)
-def centercal(center=-6.0):
+def centercal(center=-6.5):
     ttran.step(in2step(center),12000)
     time.sleep(3)
     home()
-def demo(size=7,qty=15,pps=3,margin=.1,center=-6,rpep=17):
+def stop():
+    shutdown=1
+    pep.stop()
+    tturn.stop()
+    ttran.stop()
+    GPIO.remove_event_detect(hall_pin)
+    GPIO.output(ena_pin,GPIO.HIGH)
+    try:
+        for window in root.winfo_children():
+            window.destroy()
+        homescreen()
+    except Exception as e: print('returning to home screen but',e)
+def demo(size=7,qty=15,pps=3,margin=.1,center=-6.5,rpep=17):
     r=(size/2-margin)*25.4-rpep
     xdim=360
     ydim=180
@@ -74,7 +87,7 @@ def demo(size=7,qty=15,pps=3,margin=.1,center=-6,rpep=17):
     algimg.overrideredirect(1)
     algimg.geometry('800x480')
     Label(algimg, text='TestLabel:', font=font).place(x=75,y=0)
-    Button(algimg, text="X", font=font,bg="red", fg="white", command=killscreen,height=1, width=1).place(x=750, y=0)
+    Button(algimg, text="X", font=font,bg="red", fg="white", command=killscreen,height=1, width=1).place(x=0, y=0)
     Button(algimg,text="HOME",font=font,command=home,height=2,width=10).place(x=100,y=400)
     Button(algimg,text="STOP",font=font,bg="red",fg="white",command=stop,height=2,width=10).place(x=300,y=400)
     global algim
@@ -84,7 +97,7 @@ def demo(size=7,qty=15,pps=3,margin=.1,center=-6,rpep=17):
     process=threading.Thread(target=daemo,args=(size,qty,pps,margin,center,))
     process.start()
 #     process.join()
-def daemo(size=7,qty=15,pps=3,margin=1.6,center=-6):#pps changes speed of the whole script
+def daemo(size=7,qty=15,pps=3,margin=1.6,center=-6.5):#pps changes speed of the whole script
     global shutdown
     shutdown=0
     global n #blade encoder interrupt counter global var
@@ -113,6 +126,7 @@ def daemo(size=7,qty=15,pps=3,margin=1.6,center=-6):#pps changes speed of the wh
     print(pep_ct,row_ct)
 
 #Script   
+    GPIO.output(ena_pin,GPIO.LOW)
     home()
     translate=threading.Thread(target=ttran.step,args=(in2step(row_ct[0]),24000))
     GPIO.add_event_detect(hall_pin,GPIO.FALLING,callback=hallblip,bouncetime=round(1000/pps))
@@ -136,7 +150,7 @@ def daemo(size=7,qty=15,pps=3,margin=1.6,center=-6):#pps changes speed of the wh
                 w_rot=pps*tturn_ratio/pep_ct[i]
                 tturn.stop()
 #                 tturn.step(.95*tturn_ratio,w_rot)
-                rotate=threading.Thread(target=tturn.step,args=(.95*tturn_ratio,w_rot,))
+                rotate=threading.Thread(target=tturn.step,args=(.95*tturn_ratio,w_rot,),daemon=True)
                 rotate.start()
                 while rotate.is_alive():
                     if shutdown: raise Exception('shutdown')
@@ -155,58 +169,11 @@ def daemo(size=7,qty=15,pps=3,margin=1.6,center=-6):#pps changes speed of the wh
     print(n,']',end='  ')
     stop()
     GPIO.remove_event_detect(hall_pin)
+    GPIO.output(ena_pin,GPIO.LOW)
+    GPIO.output(ena_pin,GPIO.HIGH)
     home()
-    stop() #just to be sure
     print(round(time.time()-pizzaTime,2),'sec')
-    try:
-        for window in root.winfo_children():
-            window.destroy()
-        homescreen()
-    except Exception as e: print('returning to home screen but',e)
-def half(size=10,qty=0,pps=3):
-    t0=time.time() #start timer
-    global n #interrupt counter global var
-    pep_ct={14:[1,4,7,10,13,16],
-            10:[3,6,9]}
-    row_ct={14:[-5.3,1.12,1.12,1.12,1.12,1.12],
-            10:[-5.6,1.5,1.5,1.6]}
-    home()
-    translate=threading.Thread(target=ttran.step,args=(in2step(row_ct[size][0]),24000))
-    if pep_ct[size][0]<4: #slow down blade and table for lower counts
-        rotate=threading.Thread(target=tturn.ramp,args=(pps*tturn_ratio/pep_ct[size][1],))
-    else: rotate=threading.Thread(target=tturn.ramp,args=(pps*tturn_ratio/pep_ct[size][0],))
-    translate.start()
-    rotate.start()
-    translate.join()
-    rotate.join()
-    n=1
-    tturnrev=1
-    pep.ramp(pps*pep_ratio,.5)
     
-    for i in range(len(pep_ct[size])): #the business end
-        if i: #prevent duplicate initial index movement   
-            translate=threading.Thread(target=ttran.step,args=(in2step(row_ct[size][i]),24000,))
-            translate.start()
-        if pep_ct[size][i]>1:
-            w_rot=pps*tturn_ratio/pep_ct[size][i]
-            tturn.stop()
-            tturnrev=-tturnrev
-            tturn.step(.5*tturn_ratio*tturnrev,w_rot)
-            tturn.turn(w_rot*tturnrev/2)
-        print('Target: ',pep_ct[size][i],'\tCount: ',n)
-        n=0
-        m=0
-        while m==n:pass
-    stop()
-    home()
-    print('Time Elapsed: ',round(time.time()-t0,2),'s,',n,'extra pep')
-    
-def stop():
-    shutdown=1
-    pep.stop()
-    tturn.stop()
-    ttran.stop()
-    GPIO.remove_event_detect(hall_pin)
 
 
 #***********************UIFunctions******************************#
@@ -228,25 +195,25 @@ def killscreen():   #Program kills main window
     root.destroy()
 def homescreen():
     root.overrideredirect(1) #Full screen if uncommented
-    root.geometry('800x480')
+    root.geometry('640x480')
     root.title("Sm^rt Pep")
     namelabel=Label(root, text="Welcome to   SM^RT PEPP   by Agàpe Automation", font=font).place(x=75,y=0)
 
     fnoption=[None]*9
-    fnoption[1]=Button(root,text=preset[1]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[1]['size'],preset[1]['qty']),height=2,width=4)
-    fnoption[2]=Button(root,text=preset[2]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[2]['size'],preset[2]['qty']),height=2,width=4)
-    fnoption[3]=Button(root,text=preset[3]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[3]['size'],preset[3]['qty']),height=2,width=4)
-    fnoption[4]=Button(root,text=preset[4]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[4]['size'],preset[4]['qty']),height=2,width=4)
-    fnoption[5]=Button(root,text=preset[5]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[5]['size'],preset[5]['qty']),height=2,width=4)
-    fnoption[6]=Button(root,text=preset[6]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[6]['size'],preset[6]['qty']),height=2,width=4)
-    fnoption[7]=Button(root,text=preset[7]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[7]['size'],preset[7]['qty']),height=2,width=4)
-    fnoption[8]=Button(root,text=preset[8]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[8]['size'],preset[8]['qty']),height=2,width=4)
-    fnlocx=[None,30,220,410,600,30,220,410,600]
+    fnoption[1]=Button(root,text=preset[1]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[1]['size'],preset[1]['qty']),height=2,width=3)
+    fnoption[2]=Button(root,text=preset[2]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[2]['size'],preset[2]['qty']),height=2,width=3)
+    fnoption[3]=Button(root,text=preset[3]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[3]['size'],preset[3]['qty']),height=2,width=3)
+    fnoption[4]=Button(root,text=preset[4]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[4]['size'],preset[4]['qty']),height=2,width=3)
+    fnoption[5]=Button(root,text=preset[5]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[5]['size'],preset[5]['qty']),height=2,width=3)
+    fnoption[6]=Button(root,text=preset[6]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[6]['size'],preset[6]['qty']),height=2,width=3)
+    fnoption[7]=Button(root,text=preset[7]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[7]['size'],preset[7]['qty']),height=2,width=3)
+    fnoption[8]=Button(root,text=preset[8]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[8]['size'],preset[8]['qty']),height=2,width=3)
+    fnlocx=[None]+[30,180,330,480]*2
     fnlocy=[None]+[40]*4+[220]*4
     for i in range(1,len(fnoption)):              
         fnoption[i].place(x=fnlocx[i],y=fnlocy[i])
     fnedit=Button(root,text='EDIT',font=font,command=fn_edit1,height=2,width=10).place(x=500,y=400)
-    Button(root, text="X", font=font,bg="red", fg="white", command=killscreen,height=1, width=1).place(x=750, y=0)
+    Button(root, text="X", font=font,bg="red", fg="white", command=killscreen,height=1, width=1).place(x=0,y=0)
     Button(root,text="HOME",font=font,command=home,height=2,width=10).place(x=100,y=400)
     Button(root,text="STOP",font=font,bg="red",fg="white",command=stop,height=2,width=10).place(x=300,y=400)
 
@@ -255,22 +222,22 @@ def fn_edit1():
     global n
     fnedit1=Toplevel(root)
     fnedit1.overrideredirect(1)
-    fnedit1.geometry('800x480')
+    fnedit1.geometry('640x480')
     Label(fnedit1, text='Select which preset to edit:', font=font).place(x=75,y=0)                
     fnoption=[None]*9
-    fnlocx=[None,30,220,410,600,30,220,410,600]
+    fnlocx=[None]+[30,180,330,480]*2
     fnlocy=[None]+[40]*4+[220]*4
     for i in range(1,len(fnoption)):
         fnoption[i]=Button(fnedit1,text=preset[i]['name'],font=bold,bg='green',fg='white',command=lambda:fn_edit2(i),height=2,width=4)
         fnoption[i].place(x=fnlocx[i],y=fnlocy[i])
     print(dir(fnoption[1]))
     Button(fnedit1,text='BACK',font=font,command=fnedit1.destroy,height=2,width=10).place(x=500,y=400)
-    Button(fnedit1, text="X", font=font,bg="red", fg="white", command=killscreen,height=1, width=1).place(x=750, y=0)
+    Button(fnedit1, text="X", font=font,bg="red", fg="white", command=killscreen,height=1, width=1).place(x=0, y=0)
 def fn_edit2(m):
     global fnedit2
     fnedit2=Toplevel(fnedit1)
     fnedit2.overrideredirect(1)
-    fnedit2.geometry('800x480')
+    fnedit2.geometry('640x480')
     Label(fnedit2, text='Edit parameters for:', font=font).place(x=75,y=10) 
     Button(fnedit2,text=preset[m]['name'],font=font,bg='green',fg='white',height=4,width=10).place(x=100,y=50)
     
@@ -286,8 +253,14 @@ def fn_edit2(m):
     sbox.insert(0,str(preset[m]['size']))
     sbox.place(x=500,y=200)
     
+    Label(fnedit2, text='__Crust Margin:', font=font).place(x=300,y=320)
+    mbox=Spinbox(fnedit2,from_=0,to=3,increment=.1,font=bold,wrap=True,width=3,command=lambda:fn_edit3(m,'size',sbox.get()))
+    mbox.delete(0,'end')
+    mbox.insert(0,str(preset[m]['size']))
+    mbox.place(x=500,y=200)
+    
     Button(fnedit2,text='BACK',font=font,command=fnedit2.destroy,height=2,width=10).place(x=500,y=400)
-    Button(fnedit2, text="X", font=font,bg="red", fg="white", command=killscreen,height=1, width=1).place(x=750, y=0)
+    Button(fnedit2, text="X", font=font,bg="red", fg="white", command=killscreen,height=1, width=1).place(x=0, y=0)
 def fn_edit3(m,n,amt):
     preset[m][n]=int(amt)
 
