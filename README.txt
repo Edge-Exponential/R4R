@@ -12,6 +12,15 @@ peptest_v3.py [v3] runs the involute pep blade with a DC motor and PID control.
 peptest_v4.py [v4] runs the involute pep blade with a stepper motor and minimal feedback.
 	Pepp quantity and row spacing for each size is brute-forced with arrays and dictionaries.
 
+peptest_v5.py [v5] builds on v4 with an pepperoni position algorithm.
+	Generates preview image and position arrays based on quantity and crust dimensions.
+	
+peptest_v6.py [v6] replaces blademotor clock signal with serial command.
+	Arduino receives message and generates cleaner clock signal.
+	
+peptest_v7.py [v7] cleans up UI and fully integrates lifter to pep cycle.
+	Removed settings screen.
+	
 chztest.py runs an auger stepper, turntable stepper, and load cell for PID control.
 	Vibrating conveyor control via relay
 
