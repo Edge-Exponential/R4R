@@ -3,6 +3,7 @@ import time
 import stepper
 import threading
 import math
+import serial
 import PIL.Image,PIL.ImageDraw,PIL.ImageTk
 
 
@@ -14,20 +15,42 @@ ena_pin=16 #stepper motor enable, 1=disable to keep temps down
 GPIO.setup(lim_pin,GPIO.IN, pull_up_down=GPIO.PUD_UP) 
 GPIO.setup(hall_pin,GPIO.IN, pull_up_down=GPIO.PUD_UP)
 GPIO.setup(ena_pin,GPIO.OUT)
-pep=stepper.motor(33,29)
+
 tturn=stepper.motor(11,15)
 ttran=stepper.motor(21,23)
 tlift=stepper.motor(38,40)
 
-pep_ratio=3200*14/3  #steps/bladerev
-ttran_ratio=-3200    #steps/transrev
-tturn_ratio=-1600    #steps/tablerev
-tlift_ratio=200*8  #steps/rev (12mm pitch)
-n=0
-shutdown=0
+pep_ratio = 3200*14/19  #steps/bladerev
+pep_max = 10000
+ttran_ratio = -1600    #steps/transrev
+tturn_ratio = 1600    #steps/tablerev
+tturn_max = .8*tturn_ratio
+tlift_ratio = 400/.19196  #steps/in (0.19196in screw lead)
+tlift_max = 1.5 #inch extension
+n = 0
+shutdown = 0
+
+try:
+    ser = serial.Serial("/dev/ttyACM0",9600)
+    class pep:
+        freq = 0
+        def stop():
+            ser.write(b'0\r\n')
+            pep.freq=0
+        def turn(freq):
+            if freq == 0:
+                pep.stop()
+                return
+            freq = int(1000000/(2*freq))
+            ser.write(b'%d\r\n' % freq)
+            pep.freq=freq
+    print('ser to Arduino')
+except:
+    pep=stepper.motor(33,29)
+    print('stepper.motor')
 
 #***********************MechanicalFunctions******************************#   
-def in2step(inch,pulleydiam=1.337):
+def in2step(inch,pulleydiam=1.337/20*15):
     return int(inch*ttran_ratio/(3.14159*pulleydiam)) #Convert distance to steps on motor
 def home():
     GPIO.output(ena_pin,GPIO.LOW)
@@ -37,46 +60,82 @@ def home():
 def hallblip(x):
     global n
     n+=1
-def centercal(center=-6.2):
+    if False:
+        global derf
+        if 'derf' in globals():
+            print(1/(time.time()-derf))
+        derf=time.time()
+def centercal(center=-8.2):
     ttran.step(in2step(center),12000)
     time.sleep(2)
     home()
+
+def enable():
+    GPIO.output(ena_pin,GPIO.LOW)
+    
 def stop():
     global shutdown
     shutdown=1
+    GPIO.output(ena_pin,GPIO.HIGH)
     pep.stop()
     tturn.stop()
     ttran.stop()
     GPIO.remove_event_detect(hall_pin)
-    GPIO.output(ena_pin,GPIO.HIGH)
 #     try:
 #         for window in root.winfo_children():
 #             window.destroy()
 #         homescreen()
 #     except Exception as e: print(' and returned to home screen but',e)
-def demo(size=7,qty=15,pps=5,margin=.7
-         ,center=-6.2,rpep=17):
+def run_pep(size=7, qty=15, pps=3 , margin=0, center=-8.1, rpep=17):
+    #create pizza mockup image then run motors pep_program in thread
+    
+    #calculate pep pitch circle radius in mm
     r=(size/2-margin)*25.4-rpep
+    
+    #image dimensions/setup
     xdim=360
     ydim=180
     im=PIL.Image.new('RGB',(xdim*2,ydim*2),(200,200,200))
     draw=PIL.ImageDraw.Draw(im)
     draw.ellipse((xdim-size*12.7,ydim-size*12.7,xdim+size*12.7,ydim+size*12.7),fill=(255,219,112),outline='brown')
+    
+    #calculate spacing between each row in mm (delta_radius)
     dr=math.sqrt(math.pi*r*r/(.0003172*qty*qty+.8365*qty-3.9))
+    
+    #calculate the number of peps in each row, with some fudging to get it to look right
     npep=[]
     for m in range(math.ceil(r/dr)):
         npep.append(round((r-m*dr)*2*math.pi/dr))
     try: npep.remove(0)
     except ValueError: pass
     if npep[-1]>4:npep.append(1)
-    for i in npep:
-        dTheta=2*math.pi/i
-        for j in range(i):
-            x=math.cos(j*dTheta)*r+xdim
-            y=math.sin(j*dTheta)*r+ydim
+    
+    #calculate row_ct and pep_ct for pep_program coordination
+    row_ct=[] #how far to move to each row in inches
+    pep_ct=[] #number of blade revolutions per table revolution
+    nr=math.ceil(r/dr) #Number of Rows
+    for m in range(nr): #for each row calculate...
+        pep_ct.insert(0, round((r-m*dr) * 2*math.pi / dr)) #number of peps in row
+        row_ct.insert(0, round(center + r/25.4 - m*dr/25.4, 2)) #distance from home position
+    if pep_ct[0]==0:pep_ct[0]=1 #force center row to round up to 1
+    if pep_ct[0]>4: #add center pep if there is space
+        nr+=1
+        pep_ct.insert(0,1)
+        row_ct.insert(0,center)
+    for m in range(nr-1,0,-1): #convert row locations from absolute to relative
+        row_ct[m]=round(row_ct[m]-row_ct[m-1],2)
+    
+    
+    #for each row; for each pep: draw a red circle
+    for row in npep:
+        dTheta=2*math.pi/row
+        for pep in range(row):
+            x=math.cos(pep*dTheta)*r+xdim
+            y=math.sin(pep*dTheta)*r+ydim
             draw.ellipse((x-rpep,y-rpep,x+rpep,y+rpep),fill='red',outline='black')
         r-=dr
-    #TkInter stuff:
+ 
+    #TkInter display finalized pep layout image:
     global algimg
     algimg=Toplevel(root)
     algimg.overrideredirect(1)
@@ -88,90 +147,107 @@ def demo(size=7,qty=15,pps=5,margin=.7
     global algim
     algim=PIL.ImageTk.PhotoImage(im)
     Label(algimg,image=algim).place(x=30,y=40)
-    process=threading.Thread(target=daemo,args=(size,qty,pps,margin,center,))
+    
+    size_i = 4 - math.ceil((size/2)-4) # index {14:0, 12:1, 10:2, 7:3}
+    lift_steps = size_i * .25 * tlift_ratio
+    
+    #run pep_program with e-stop capability
+    print('run_pep:',pep_ct,row_ct,'r=',round(r,2),'dr=',round(dr,2),'pps=',pps, 'tlift=',lift_steps)
+    process=threading.Thread(target=pep_program ,args=(row_ct,pep_ct,pps,lift_steps))
     process.start()
-def daemo(size,qty,pps,margin,center):#pps changes speed of the whole script
+    
+def pep_program(row_ct,pep_ct,pps,lift_steps): #pps changes speed of the whole script
     global shutdown
     shutdown=0
     global n #blade encoder interrupt counter global var
-    rpep=.7 #pepperoni radius
     pizzaTime=time.time() #start timer
-    #row location and quantity parameters
-    if qty<4.654: #algorithm minimum
-        qty=5
-    r=round((size-margin-rpep)/2,2) #radius, distance from center to middle of outside row
-    dr=round(math.sqrt(math.pi*r*r/(0.0003172*qty*qty+.8365*qty-3.9)),2) #delta radius, distance between rows and peps in a row
-    nr=math.ceil(r/dr) #number of rows
-    #print(r,dr)
-    row_ct=[] #stepper instructions for how far to move to each row
-    pep_ct=[] #stepper instructions for how fast to rotate table relative to blade speed
-    for m in range(nr): #for each row calculate...
-        pep_ct.insert(0,round((r-m*dr)*2*math.pi/dr)) #number of peps in row
-        row_ct.insert(0,round(center+r-m*dr,2)) #distance from home position
-    if pep_ct[0]==0:pep_ct[0]=1 #force center row to round up to 1
-    if pep_ct[0]>4: #add center pep if there is space
-        nr+=1
-        pep_ct.insert(0,1)
-        row_ct.insert(0,center)
-    for m in range(nr-1,0,-1): #convert row locations from absolute to relative
-        row_ct[m]=round(row_ct[m]-row_ct[m-1],2)
     
-    print(pep_ct,row_ct)
-
-#Script   
+    #move gantry and start table
     GPIO.output(ena_pin,GPIO.LOW)
     home()
+    
+    tturn_steps = int(tturn_ratio * .2*pep_ct[0]) #rotate table 1 pep width less than 1 rev
+    tturn_speed = pps*tturn_steps/pep_ct[0]
+    pep_speed = pps*pep_ratio #calculate how fast to rotate blade
+    if pep_speed > pep_max:
+        pep_speed = pep_max
+        pps = pps * abs(pep_max/pep_speed)
+    tturn_speed = pps*tturn_steps/pep_ct[0]  #fit x peps in that section, assuming bladespeed of pps
+    mod = 1
+    if abs(tturn_speed) > tturn_max: #slow down blade and table for lower counts
+        mod = mod * abs(tturn_max/tturn_speed)
+    print(round(mod,2),end='')
+    tturn_speed = tturn_speed*mod
+    pep_speed = pep_speed*mod
+
+    
     translate=threading.Thread(target=ttran.step,args=(in2step(row_ct[0]),24000))
-    GPIO.add_event_detect(hall_pin,GPIO.FALLING,callback=hallblip,bouncetime=round(1000/pps))
-    if pep_ct[0]<4 and len(pep_ct)>1: #slow down blade and table for lower counts
-        rotate=threading.Thread(target=tturn.ramp,args=(pps*tturn_ratio/pep_ct[1],))
-    else: rotate=threading.Thread(target=tturn.ramp,args=(pps*tturn_ratio/pep_ct[0],))
+    rotate=threading.Thread(target=tturn.ramp,args=(tturn_speed,))
+    #lift = threading.Thread(target=tlift.step,args=(-lift_steps,8000,))
     translate.start()
     rotate.start()
+    #lift.start()
     translate.join()
+    #start slicing, count first pep;
+    GPIO.add_event_detect(hall_pin,GPIO.FALLING,callback=hallblip,bouncetime=round(800/pps))
+    pep.turn(pep_speed)
     rotate.join()
-    n=1
-    k=n
-    pep.ramp(pps*pep_ratio,.5)
-    print('pep Hz: ',pps*pep_ratio)
+    n = 0 #peps per row on interrupt
+    k = n #total peps on pizza compiled at end of loop
     
-    print('[',end='')
+    print('\t [',end='')
     for i in range(len(pep_ct)): #the business end
         try:
             if i and GPIO.input(lim_pin): #prevent duplicate initial index and overlimit movement
-                translate=threading.Thread(target=ttran.step,args=(in2step(row_ct[i]),24000,))
+                translate=threading.Thread(target=ttran.step,args=(in2step(row_ct[i]),12000,))
                 translate.start()
             if pep_ct[i]>1:
-                w_rot=pps*tturn_ratio/pep_ct[i]
-                tturn.stop()
-#                 tturn.step(.95*tturn_ratio,w_rot)
-                rotate=threading.Thread(target=tturn.step,args=(2*.95*tturn_ratio,w_rot,))
+                
+                tturn_steps = int(tturn_ratio * (1 - .25 * 2**(-i))) #rotate table 1 pep width less than 1 rev
+                tturn_speed = 2*pps*tturn_steps/pep_ct[i] #fit x peps in that section, assuming bladespeed of pps
+                pep_speed = pps*pep_ratio #calculate how fast to rotate blade
+                
+                mod = 1  # default no mod multiplier
+                if abs(tturn_speed) > tturn_max: #slow down blade and table for lower counts
+                    mod = mod * abs(tturn_max/tturn_speed)
+                    print('t',end='')
+                if pep_speed > pep_max:
+                    mod = mod * abs(pep_max/pep_speed)
+                    print('p',end='')
+                tturn_speed = tturn_speed*mod
+                pep_speed = pep_speed*mod
+                tturn.stop() #end previous tturn.turn to start tturn.step thread
+                
+                rotate=threading.Thread(target=tturn.step,args=(tturn_steps,tturn_speed,))
+                slicer=threading.Thread(target=pep.turn,args=(pep_speed,))
                 rotate.start()
+                slicer.start()
                 
                 while rotate.is_alive():
                     if shutdown:raise Exception('shutdown')
-                    time.sleep(.01) #allow time for translate.run()
-                tturn.turn(w_rot/2)
+                    time.sleep(.01) #allow time for threads
+                tturn.turn(tturn_speed)
+                
             print(n, end=', ', flush=True)
-            k += n
-            n=0
-            m=0
-            while m==n:pass
-        except KeyboardInterrupt:
-            print('cancel')
-            break
+            k += n #compile total pep count
+            n=0 #move to new row and reset counter
+            while n==0:pass #wait for encoder to trigger before moving on
         except Exception as e:
-            print(e)
+            print(e,end='')
             break
     print(n,k,']',end='  ')
+    
+    #stop and clean up
     stop()
-    GPIO.remove_event_detect(hall_pin)
-    GPIO.output(ena_pin,GPIO.LOW)
-    GPIO.output(ena_pin,GPIO.HIGH)
+    #tlift.step(lift_steps,8000)
     home()
-    print(round(time.time()-pizzaTime,2),'sec')
+    stop()
+    cycletime=round(time.time()-pizzaTime,2)
+    print(cycletime,'sec')
+    
     global algimg
     algimg.destroy()
+    
 
 
 #***********************UIFunctions******************************#
@@ -183,7 +259,7 @@ font=font.Font(family='Helvetica', size=20, weight='normal')
 preset={1:{'name':'7\nFull','size':7,'qty':25},
         2:{'name':'10\nFull','size':10,'qty':48},
         3:{'name':'12\nFull','size':12,'qty':75},
-        4:{'name':'14\nFull','size':14,'qty':102},
+        4:{'name':'14\nFull','size':14,'qty':101},
         5:{'name':'7\nLess','size':7,'qty':16},
         6:{'name':'10\nLess','size':10,'qty':31},
         7:{'name':'12\nLess','size':12,'qty':46},
@@ -198,14 +274,14 @@ def homescreen():
     namelabel=Label(root, text="Welcome to   SM^RT PEPP   by Agàpe Automation", font=font).place(x=75,y=0)
 
     fnoption=[None]*9
-    fnoption[1]=Button(root,text=preset[1]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[1]['size'],preset[1]['qty']),height=2,width=3)
-    fnoption[2]=Button(root,text=preset[2]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[2]['size'],preset[2]['qty']),height=2,width=3)
-    fnoption[3]=Button(root,text=preset[3]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[3]['size'],preset[3]['qty']),height=2,width=3)
-    fnoption[4]=Button(root,text=preset[4]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[4]['size'],preset[4]['qty']),height=2,width=3)
-    fnoption[5]=Button(root,text=preset[5]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[5]['size'],preset[5]['qty']),height=2,width=3)
-    fnoption[6]=Button(root,text=preset[6]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[6]['size'],preset[6]['qty']),height=2,width=3)
-    fnoption[7]=Button(root,text=preset[7]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[7]['size'],preset[7]['qty']),height=2,width=3)
-    fnoption[8]=Button(root,text=preset[8]['name'],font=bold,bg='green',fg='white',command=lambda:demo(preset[8]['size'],preset[8]['qty']),height=2,width=3)
+    fnoption[1]=Button(root,text=preset[1]['name'],font=bold,bg='green',fg='white',command=lambda:run_pep(preset[1]['size'],preset[1]['qty']),height=2,width=3)
+    fnoption[2]=Button(root,text=preset[2]['name'],font=bold,bg='green',fg='white',command=lambda:run_pep(preset[2]['size'],preset[2]['qty']),height=2,width=3)
+    fnoption[3]=Button(root,text=preset[3]['name'],font=bold,bg='green',fg='white',command=lambda:run_pep(preset[3]['size'],preset[3]['qty']),height=2,width=3)
+    fnoption[4]=Button(root,text=preset[4]['name'],font=bold,bg='green',fg='white',command=lambda:run_pep(preset[4]['size'],preset[4]['qty']),height=2,width=3)
+    fnoption[5]=Button(root,text=preset[5]['name'],font=bold,bg='green',fg='white',command=lambda:run_pep(preset[5]['size'],preset[5]['qty']),height=2,width=3)
+    fnoption[6]=Button(root,text=preset[6]['name'],font=bold,bg='green',fg='white',command=lambda:run_pep(preset[6]['size'],preset[6]['qty']),height=2,width=3)
+    fnoption[7]=Button(root,text=preset[7]['name'],font=bold,bg='green',fg='white',command=lambda:run_pep(preset[7]['size'],preset[7]['qty']),height=2,width=3)
+    fnoption[8]=Button(root,text=preset[8]['name'],font=bold,bg='green',fg='white',command=lambda:run_pep(preset[8]['size'],preset[8]['qty']),height=2,width=3)
     fnlocx=[None]+[30,180,330,480]*2
     fnlocy=[None]+[40]*4+[220]*4
     for i in range(1,len(fnoption)):              
